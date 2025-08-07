@@ -1,0 +1,62 @@
+# TODOs
+
+copied from `utils_split.md` planning doc
+
+
+## Dependencies
+ * `bff`
+   - a pip extra (enabled whenever both are installed)
+   - see `Planned Features > New Base Classes`
+
+
+## Migration from `bsp_tool`
+   - `utils.binary`
+   - `core`
+
+### Maybes
+   - `lumps`
+     * `LumpClass.from_count` is handy
+     * could rename to `StructArray`
+     * `BasicLumpClass` is just as handy
+
+
+## Planned Features
+### New Base Classes
+> a standard file w/ lumps baseclass
+> base.Bsp is kinda specific, especially in name
+
+ * classes (both `bff.File` subclasses)
+   - `LumpFile`
+      * is a lump
+      * indexed by a `bff.FriendlyFile`
+   - `LumpyFile`
+      * has lumps
+ * examples
+   - `base.Bsp`
+   - `bish.DXBC`
+   - `lumps.GameLump`
+   - `stbsp.StreamBsp`
+   - `bspx` & `.vtf` also have some lumps
+   - `ExternalLumpManager`
+     * could be a `FriendlyFile` w/ no base file
+ * key features
+   - `.changes` dict to speed up `.lump_as_bytes`
+   - deferred SpecialLump parsing
+   - branch scripts system for multiple formats
+ * universal methods & attrs
+   - `.headers: Dict[str, Header]`
+   - `.__getattr__` `x.LUMP` / `x.RAW_LUMP`
+   - `.loading_errors: Dict[str, Exception]`
+   - `.save_as()`
+   - `.lump_as_bytes(str) -> bytes`
+
+### Parsers
+ * `.ksy` [Kaitai Struct](https://doc.kaitai.io/)
+   - official tools feel bloated
+   - and a nightmare to install on windows
+   - want a lightweight alternative
+ * `.bt` Binary Template
+   - format used by [010 Hex](https://www.sweetscape.com/010editor/)
+   - useful for sharing w/ other reverse engineers
+ * `.c` / `.h`
+   - convert `core.Struct` to and from `C`
