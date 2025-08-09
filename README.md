@@ -9,8 +9,9 @@
  * `read_struct` & `write_struct` wrappers for `struct` module
 
 ### Migrating
- - [ ] `bsp_tool.utils.binary`
- - [ ] `bsp_tool.core`
+ - [x] `bsp_tool.utils.binary`
+ - [x] `bsp_tool.core`
+ - [ ] tests
 
 ### Planned
 
