@@ -11,7 +11,7 @@
 ### Migrating
  - [x] `bsp_tool.utils.binary`
  - [x] `bsp_tool.core`
- - [ ] tests
+ - [x] tests
 
 ### Planned
 

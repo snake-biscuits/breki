@@ -8,6 +8,12 @@ copied from `utils_split.md` planning doc
    - a pip extra (enabled whenever both are installed)
    - see `Planned Features > New Base Classes`
 
+> NOTE: `bff` `ArchiveClass`es & `DiscClass`es are dependant on `breki`
+> -- so New Base Classes will have to be in another repo
+> OR: `bff` becomes part of `breki`
+> -- would make it easier to include `lumps`
+> -- `bff` can't be used without `breki` anyway
+
 
 ## Migration from `bsp_tool`
    - `utils.binary`
