@@ -1,11 +1,12 @@
 __all__ = [
-    "binary", "core",
+    "binary", "core", "libraries",
     "find_all", "read_str", "read_struct", "write_struct", "xxd",
     "BitField", "Struct", "MappedArray"]
 
 # modules
 from . import binary
 from . import core
+from . import libraries
 
 # classes
 from .binary import find_all, read_str, read_struct, write_struct, xxd
