@@ -52,6 +52,11 @@ copied from `utils_split.md` planning doc
    - `.loading_errors: Dict[str, Exception]`
    - `.save_as()`
    - `.lump_as_bytes(str) -> bytes`
+ * path utils
+   - split folder & filename
+   - expand user / env
+   - get extension
+   - case insensitive glob / fuzzyfind
 
 ### Parsers
  * `.ksy` [Kaitai Struct](https://doc.kaitai.io/)
