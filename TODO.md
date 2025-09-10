@@ -6,6 +6,10 @@
      called w/ `super()` to reduce duplicate code
    - `._get_stream(self, type_)` overrides
      fall back to `_default` on `FileNotFound`
+   - `.from_nested_archive(cls, filepath: str, archive_classes: dict)`
+     walk down into a nested series of ArchiveClasses & open a file
+     `archive_classes = {"*.ext": ArchiveClass}`
+     `bsp_tool.autodetect.naps`
 
 ## Planned Features
  * path utils
