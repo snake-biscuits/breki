@@ -97,7 +97,7 @@ class HybridFile(ParsedFile):
     def __repr__(self) -> str:
         descriptor = [f'"{self.filename}"']
         if self.type == base.DataType.EITHER:  # match .ext
-            ext = f".{self.rpartition('.')[-1]}"
+            ext = f".{self.filename.rpartition('.')[-1]}"
             self.type = self.exts.get(ext, base.DataType.EITHER)
         descriptor.append(f"[{self.type.name}]")
         if self.archive is not None:
@@ -114,11 +114,15 @@ class HybridFile(ParsedFile):
         raise NotImplementedError()
 
     # NOTE: for .stream & .parse if type == EITHER
-    @staticmethod
-    def identify(filepath: str, stream: base.ByteStream) -> base.DataType:
+    @classmethod
+    def identify(cls, filepath: str, stream: base.ByteStream) -> base.DataType:
         """determine type if ambiguous"""
-        # test filepath against extensions
-        raise NotImplementedError()
+        ext = f".{filepath.rpartition('.')[-1]}"
+        type_ = cls.exts.get(ext, base.DataType.EITHER)
+        return type_
+        # NOTE: subclasses should test stream if type_ == EITHER
+        # -- stream.read().isascii() works, but is the slowest option
+        # -- subclasses get the extension check for free w/ super()
 
     def parse(self, type_: base.DataType = None):
         type_ = self.type if type_ is None else type_
