@@ -16,9 +16,7 @@ class DataType(enum.Enum):
     TEXT = 0
     BINARY = 1
     EITHER = 2  # for HybridFile
-# NOTE: EITHER will fall back to BINARY if input is ambiguous
-# -- if you don't want this behaviour, detect DataType first!
-# -- HybridFile will use extensions to determine this (e.g. `.usda`/`.usdc`)
+# NOTE: EITHER data will be loaded as BINARY
 
 # NOTE: ETYMOLOGY: the term "filepath" is used for "folder/filename"
 # -- "filename" is reserved for basenames (filename w/o folder)
@@ -33,7 +31,7 @@ class File:
     type: DataType = DataType.EITHER
     # data access
     archive: object  # ArchiveClass
-    stream: DataStream  # property
+    stream: DataStream  # cached_property
 
     def __init__(self, filepath: str, archive=None):
         self.archive = archive
@@ -51,21 +49,26 @@ class File:
         descriptor = " ".join(descriptor)
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
-    @functools.cached_property
-    def stream(self) -> DataStream:
+    # .stream property getter
+    def _get_stream(self, type_: DataType = None) -> DataStream:
         """deferring opening the file until it's touched"""
+        type_ = self.type if type_ is None else type_
+        assert isinstance(type_, DataType)
         if self.archive is None:
-            mode = "rb" if self.type != DataType.TEXT else "r"
+            mode = "rb" if type_ != DataType.TEXT else "r"
             out = open(self.filename, mode)
         else:
             raw_bytes = self.archive.read(self.filename)
-            if self.type == DataType.TEXT:
+            if type_ == DataType.TEXT:
                 # TODO: expose charset & error mode settings
                 raw_text = raw_bytes.decode("utf-8", "strict")
                 out = io.StringIO(raw_text)
             else:
                 out = io.BytesIO(raw_bytes)
+        self.type = type_  # side effect!
         return out
+
+    stream = functools.cached_property(_get_stream)
 
     # initialisers
     # NOTE: all initialisers must provide a filepath
@@ -73,6 +76,7 @@ class File:
     def from_archive(cls, filepath: str, archive, type_=None) -> File:
         """defers read until .stream is accessed"""
         type_ = cls.type if type_ is None else type_
+        assert isinstance(type_, DataType)
         out = cls(filepath, archive)
         out.size = archive.sizeof(filepath)
         out.type = type_
@@ -82,6 +86,7 @@ class File:
     def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None) -> File:
         """-> .from_stream"""
         type_ = cls.type if type_ is None else type_
+        assert isinstance(type_, DataType)
         if type_ == DataType.TEXT:
             # TODO: expose charset & error mode settings
             raw_text = raw_bytes.decode("utf-8", "strict")
@@ -95,9 +100,10 @@ class File:
         return out
 
     @classmethod
-    def from_file(cls, filepath: str, type_=None) -> File:
+    def from_file(cls, filepath: str, type_: DataType = None) -> File:
         """defers read until .stream is accessed"""
         type_ = cls.type if type_ is None else type_
+        assert isinstance(type_, DataType)
         out = cls(filepath)
         out.size = os.path.getsize(filepath)
         out.type = type_
@@ -108,23 +114,34 @@ class File:
     def from_lines(cls, filepath: str, lines: List[str]) -> File:
         """-> .from_stream"""
         raw_text = "\n".join(lines)
-        return cls.from_stream(filepath, io.StringIO(raw_text))
+        out = cls.from_stream(filepath, io.StringIO(raw_text))
+        out.type = DataType.TEXT
+        return out
 
     @classmethod
-    def from_stream(cls, filepath: str, stream: DataStream) -> File:
+    def from_stream(cls, filepath: str, stream: DataStream, type_: DataType = None) -> File:
         """override .stream property"""
+        type_ = cls.type if type_ is None else type_
+        assert isinstance(type_, DataType)
+        is_binary = isinstance(stream, (io.BytesIO, io.BufferedReader))
+        is_text = isinstance(stream, (io.StringIO, io.TextIOWrapper))
+        if not (is_binary or is_text):
+            raise RuntimeError(
+                f"Could not determine DataType of stream: {stream!r}")
         out = cls(filepath)
         out.stream = stream
         # NOTE: always reports bytesize, regardless of stream type
         out.size = out.stream.seek(0, 2)
         out.stream.seek(0)
-        if isinstance(stream, (io.BytesIO, io.BufferedReader)):
-            out.type = DataType.BINARY
-        elif isinstance(stream, (io.StringIO, io.TextIOWrapper)):
-            out.type = DataType.TEXT
+        # type check
+        if type_ == DataType.BINARY:
+            assert is_binary
+        elif type_ == DataType.TEXT:
+            assert is_text
+        elif type_ in (None, DataType.EITHER):  # assign type
+            out.type = DataType.BINARY if is_binary else DataType.TEXT
         else:
-            raise RuntimeError(
-                f"Could not determine DataType of stream: {stream!r}")
+            raise RuntimeError("Invalid type_: {type_!r}")
         return out
 
 
