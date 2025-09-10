@@ -12,6 +12,33 @@ ByteStream = Union[io.BytesIO, io.BufferedReader]
 DataStream = Union[TextStream, ByteStream]
 
 
+class CodePage:
+    encoding: str
+    errors: str
+
+    def __init__(self, encoding="utf-8", errors="strict"):
+        self.encoding = encoding
+        self.errors = errors
+
+    def __repr__(self) -> str:
+        args = ", ".join([
+            f'"{getattr(self, attr)}"'
+            for attr in ("encoding", "errors")])
+        return f'{self.__class__.__name__}({args})'
+
+    def __eq__(self, other: CodePage):
+        return self.__hash__() == other.__hash__()
+
+    def __hash__(self):
+        return hash((self.encoding, self.errors))
+
+    def decode(self, raw_bytes: bytes) -> str:
+        return raw_bytes.decode(self.encoding, self.errors)
+
+    def encode(self, text: str) -> bytes:
+        return text.encode(self.encoding, self.errors)
+
+
 class DataType(enum.Enum):
     TEXT = 0
     BINARY = 1
@@ -31,14 +58,16 @@ class File:
     type: DataType = DataType.EITHER
     # data access
     archive: object  # ArchiveClass
+    code_page = CodePage("utf-8", "strict")
     stream: DataStream  # cached_property
 
-    def __init__(self, filepath: str, archive=None):
+    def __init__(self, filepath: str, archive=None, code_page=None):
         self.archive = archive
         folder, filename = os.path.split(filepath)
         self.folder = folder if folder != "" else "."
         self.filename = filename
         self.size = 0
+        self.code_page = self.code_page if code_page is None else code_page
 
     def __repr__(self) -> str:
         descriptor = [f'"{self.filename}"']
@@ -63,8 +92,7 @@ class File:
         else:
             raw_bytes = self.archive.read(self.filename)
             if type_ == DataType.TEXT:
-                # TODO: expose charset & error mode settings
-                raw_text = raw_bytes.decode("utf-8", "strict")
+                raw_text = self.code_page.decode(raw_bytes)
                 out = io.StringIO(raw_text)
             else:
                 out = io.BytesIO(raw_bytes)
@@ -76,17 +104,17 @@ class File:
     # initialisers
     # NOTE: all initialisers must provide a filepath
     @classmethod
-    def from_archive(cls, filepath: str, archive, type_=None) -> File:
+    def from_archive(cls, filepath: str, archive, type_=None, code_page=None) -> File:
         """defers read until .stream is accessed"""
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
-        out = cls(filepath, archive)
+        out = cls(filepath, archive, code_page)
         out.size = archive.sizeof(filepath)
         out.type = type_
         return out
 
     @classmethod
-    def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None) -> File:
+    def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None, code_page=None) -> File:
         """-> .from_stream"""
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
@@ -97,13 +125,13 @@ class File:
         else:  # default to BINARY
             stream = io.BytesIO(raw_bytes)
             type_ = DataType.BINARY
-        out = cls.from_stream(filepath, stream)
+        out = cls.from_stream(filepath, stream, code_page)
         out.size = len(raw_bytes)
         out.type = type_
         return out
 
     @classmethod
-    def from_file(cls, filepath: str, type_: DataType = None) -> File:
+    def from_file(cls, filepath: str, type_=None, code_page=None) -> File:
         """defers read until .stream is accessed"""
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
@@ -111,18 +139,20 @@ class File:
         out.size = os.path.getsize(filepath)
         out.type = type_
         # NOTE: data loading is deferred to .stream property
+        out.code_page = cls.code_page if code_page is None else code_page
         return out
 
     @classmethod
-    def from_lines(cls, filepath: str, lines: List[str]) -> File:
+    def from_lines(cls, filepath: str, lines: List[str], code_page=None) -> File:
         """-> .from_stream"""
         raw_text = "\n".join(lines)
         out = cls.from_stream(filepath, io.StringIO(raw_text))
         out.type = DataType.TEXT
+        out.code_page = cls.code_page if code_page is None else code_page
         return out
 
     @classmethod
-    def from_stream(cls, filepath: str, stream: DataStream, type_: DataType = None) -> File:
+    def from_stream(cls, filepath: str, stream: DataStream, type_=None, code_page=None) -> File:
         """override .stream property"""
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
@@ -145,6 +175,7 @@ class File:
             out.type = DataType.BINARY if is_binary else DataType.TEXT
         else:
             raise RuntimeError("Invalid type_: {type_!r}")
+        out.code_page = cls.code_page if code_page is None else code_page
         return out
 
 

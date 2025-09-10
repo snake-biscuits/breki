@@ -8,13 +8,21 @@ from . import base
 
 class ParsedFile(base.File):
     exts: List[str] = list()  # class-level definition
-    # NOTE: we don't check filepaths for extension
+    # NOTE: we don't reject filepaths that don't have the right extension
+    is_parsed: bool
+
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
+        self.is_parsed = False
+
+    def __getattr__(self, attr: str):
+        if not self.is_parsed:
+            self.parse()
+        return getattr(self, attr)
 
     def as_bytes(self) -> bytes:
         """unparser"""
-        return b"\n".join(map(
-            lambda line: line.encode("utf-8", "strict"),
-            self.as_lines()))
+        return b"\n".join(map(self.code_page.encode, self.as_lines()))
 
     def as_lines(self) -> List[str]:
         """unparser"""
@@ -23,45 +31,35 @@ class ParsedFile(base.File):
     def parse(self):
         """deferred post-init stage"""
         raise NotImplementedError()
+        self.is_parsed = True
 
     # intialisers
     # NOTE: wrapped to force cls.type
     @classmethod
-    def from_archive(cls, filepath: str, archive, parse: bool = False) -> ParsedFile:
+    def from_archive(cls, filepath: str, archive, code_page=None) -> ParsedFile:
         """defers read until .stream is accessed"""
-        out = super().from_archive(filepath, archive, cls.type)
-        if parse:
-            out.parse()
-        return out
+        return super().from_archive(filepath, archive, cls.type, code_page)
 
     @classmethod
-    def from_bytes(cls, filepath: str, raw_bytes: bytes) -> ParsedFile:
-        """-> .from_stream + immediate parse"""
-        out = super().from_bytes(filepath, raw_bytes, cls.type)
-        out.parse()
-        return out
+    def from_bytes(cls, filepath: str, raw_bytes: bytes, code_page=None) -> ParsedFile:
+        """-> .from_stream"""
+        return super().from_bytes(filepath, raw_bytes, cls.type, code_page)
 
     @classmethod
-    def from_file(cls, filepath: str, parse: bool = False) -> ParsedFile:
+    def from_file(cls, filepath: str, code_page=None) -> ParsedFile:
         """defers read until .stream is accessed"""
-        out = super().from_file(filepath, cls.type)
-        if parse:
-            out.parse()
-        return out
+        return super().from_file(filepath, cls.type, code_page)
 
     @classmethod
-    def from_lines(cls, filepath: str, lines: List[str]) -> ParsedFile:
-        """-> .from_stream + immediate parse"""
-        out = super().from_lines(filepath, lines)
-        out.parse()
-        return out
+    def from_lines(cls, filepath: str, lines: List[str], code_page=None) -> ParsedFile:
+        """-> .from_stream"""
+        return super().from_lines(filepath, lines, code_page)
 
     @classmethod
-    def from_stream(cls, filepath: str, stream: base.DataStream) -> ParsedFile:
-        """override .stream property + immediate parse"""
-        out = super().from_stream(filepath, stream, cls.type)
-        out.parse()
-        return out
+    def from_stream(cls, filepath: str, stream: base.DataStream, code_page=None) -> ParsedFile:
+        """override .stream property"""
+        # NOTE: File.from_stream will ensure stream is valid for cls.type
+        return super().from_stream(filepath, stream, cls.type, code_page)
 
 
 class BinaryFile(ParsedFile):
@@ -73,7 +71,7 @@ class BinaryFile(ParsedFile):
 
     # initialisers
     @classmethod
-    def from_lines(cls, filepath: str, lines: List[str]) -> None:
+    def from_lines(cls, *args, **kwargs) -> None:
         raise RuntimeError("BinaryFile cannot be initialised from_lines")
 
 
@@ -120,12 +118,14 @@ class HybridFile(ParsedFile):
     @classmethod
     def identify(cls, filepath: str, stream: base.ByteStream) -> base.DataType:
         """determine type if ambiguous"""
+        # get DataType from extension
         ext = f".{filepath.rpartition('.')[-1]}"
         type_ = cls.exts.get(ext, base.DataType.EITHER)
         return type_
         # NOTE: subclasses should test stream if type_ == EITHER
-        # -- stream.read().isascii() works, but is the slowest option
-        # -- subclasses get the extension check for free w/ super()
+        # -- brute force solution: (checks every byte)
+        # -- stream.seek(0)
+        # -- return DataType.TEXT if stream.read().isascii() else DataType.BINARY
 
     def parse(self, type_: base.DataType = None):
         type_ = self.type if type_ is None else type_
@@ -138,6 +138,18 @@ class HybridFile(ParsedFile):
         else:
             raise RuntimeError(f"Invalid type: {type!r}")
         self.type = type_
+        self.is_parsed = True
+
+    def parse_binary(self):
+        """binary parser"""
+        raise NotImplementedError()
+        self.is_parsed = True
+
+    def parse_text(self):
+        """text parser"""
+        # for line in self.stream: ...
+        raise NotImplementedError()
+        self.is_parsed = True
 
     @functools.cached_property
     def stream(self) -> base.DataStream:
@@ -149,52 +161,40 @@ class HybridFile(ParsedFile):
             self.type = type_
         return out
 
-    def parse_binary(self):
-        """binary parser"""
-        raise NotImplementedError()
-
-    def parse_text(self):
-        """text parser"""
-        # for line in self.stream: ...
-        raise NotImplementedError()
-
     # initialisers
     @classmethod
-    def from_archive(cls, filepath: str, archive, parse: bool = False, type_: base.DataType = None) -> HybridFile:
+    def from_archive(cls, filepath: str, archive, type_=None, code_page=None) -> HybridFile:
         """defers read until .stream is accessed"""
-        out = super().from_archive(filepath, archive, type_)
-        if parse:
-            out.parse()
-        return out
+        return super().from_archive(filepath, archive, type_, code_page)
 
     @classmethod
-    def from_bytes(cls, filepath: str, raw_bytes: bytes, type_: base.DataType = None) -> HybridFile:
+    def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None, code_page=None) -> HybridFile:
         """-> .from_stream + immediate parse"""
         type_ = cls.type if type_ is None else type_
         if type_ == base.DataType.EITHER:
             type_ = cls.identify(io.BytesIO(raw_bytes))
-        out = super().from_bytes(filepath, raw_bytes, type_)
+        out = super().from_bytes(filepath, raw_bytes, type_, code_page)
         out.parse(type_)
         return out
 
     @classmethod
-    def from_lines(cls, filepath: str, lines: List[str]) -> HybridFile:
+    def from_lines(cls, filepath: str, lines: List[str], code_page=None) -> HybridFile:
         """-> .from_stream + immediate parse"""
-        out = super().from_lines(filepath, lines)
+        out = super().from_lines(filepath, lines, code_page)
         out.parse()
         return out
 
     @classmethod
-    def from_stream(cls, filepath: str, stream: base.DataStream, type_: base.DataType = None) -> HybridFile:
+    def from_stream(cls, filepath: str, stream: base.DataStream, type_=None, code_page=None) -> HybridFile:
         """override .stream property + immediate parse"""
-        out = super().from_stream(filepath, stream, type_)
+        out = super().from_stream(filepath, stream, type_, code_page)
         out.parse()
         return out
 
     @classmethod
-    def from_file(cls, filepath: str, parse: bool = False, type_: base.DataType = None) -> HybridFile:
+    def from_file(cls, filepath: str, parse: bool = False, type_=None, code_page=None) -> HybridFile:
         """defers read until .stream is accessed"""
-        out = super().from_file(filepath, type_)
+        out = super().from_file(filepath, type_, code_page)
         if parse:
             out.parse()
         return out

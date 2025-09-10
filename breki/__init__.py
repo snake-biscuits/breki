@@ -2,7 +2,9 @@ __all__ = [
     "binary", "core", "files", "libraries",
     "find_all", "read_str", "read_struct", "write_struct", "xxd",
     "BitField", "Struct", "MappedArray",
-    "DataType", "File", "FriendlyFile",
+    "CodePage", "DataType", "File", "FriendlyFile",
+    "ByteStream", "DataStream", "TextStream",
+    "ParsedFile",
     "BinaryFile", "FriendlyBinaryFile",
     "HybridFile", "FriendlyHybridFile",
     "TextFile", "FriendlyTextFile"]
@@ -19,7 +21,9 @@ from .binary import (
 from .core import (
     BitField, Struct, MappedArray)
 from .files import (
-    DataType, File, FriendlyFile,
+    CodePage, DataType, File, FriendlyFile,
+    ByteStream, DataStream, TextStream,  # type hints
+    ParsedFile,  # base class
     BinaryFile, FriendlyBinaryFile,
     HybridFile, FriendlyHybridFile,
     TextFile, FriendlyTextFile)
