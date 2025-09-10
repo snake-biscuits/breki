@@ -138,6 +138,12 @@ class FriendlyFile(ParsedFile):
 class BinaryFile(ParsedFile):
     type = base.DataType.BINARY
 
+    # TODO: wrap _get_stream
+    # -- try:
+    # --     stream = super()._get_stream(type_)
+    # -- except FileNotFoundError():
+    # --     stream = io.BytesIO(self._default)
+
     def as_bytes(self) -> bytes:
         """unparser"""
         raise NotImplementedError()
@@ -155,6 +161,12 @@ class FriendlyBinaryFile(BinaryFile, FriendlyFile):
 class TextFile(ParsedFile):
     type = base.DataType.TEXT
 
+    # TODO: wrap _get_stream
+    # -- try:
+    # --     stream = super()._get_stream(type_)
+    # -- except FileNotFoundError():
+    # --     stream = io.StringIO(self._default)
+
 
 class FriendlyTextFile(TextFile, FriendlyFile):
     pass
@@ -164,6 +176,7 @@ class HybridFile(ParsedFile):
     exts: Dict[str, base.DataType] = dict()
     # ^ {"*.bin": Datatype.BINARY}
     type = base.DataType.EITHER
+    # _default = b""
 
     def __repr__(self) -> str:
         descriptor = [f'"{self.filename}"']
@@ -180,6 +193,17 @@ class HybridFile(ParsedFile):
             descriptor.append(f"in {archive_repr}")
         descriptor = " ".join(descriptor)
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
+
+    # TODO: wrap _get_stream
+    # -- try:
+    # --     stream = super()._get_stream(type_)
+    # -- except FileNotFoundError():
+    # --     if isinstance(self._default, bytes):
+    # --         stream = io.BytesIO(self._default)
+    # --     elif isinstance(self._default, str):
+    # --         stream = io.StringIO(self._default)
+    # --     else:
+    # --         raise RuntimeError(f"invalid _default type: {type(self._default)}")
 
     def as_bytes(self) -> List[str]:
         """binary unparser"""

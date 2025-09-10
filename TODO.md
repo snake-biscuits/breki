@@ -1,11 +1,11 @@
 # TODOs
 
-copied from `utils_split.md` planning doc
-
-
-## Dependencies
-> Currently standard library only
-
+## General
+ * `ParsedFile`
+   - `._repr(self, descriptor: str)`
+     called w/ `super()` to reduce duplicate code
+   - `._get_stream(self, type_)` overrides
+     fall back to `_default` on `FileNotFound`
 
 ## Planned Features
  * path utils
