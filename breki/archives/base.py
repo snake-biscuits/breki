@@ -1,11 +1,11 @@
 from __future__ import annotations
 import enum
 import fnmatch
-import io
 import os
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
-from .. import external
+from .. import files
+from ..files.parsed import parse_first
 
 
 def path_tuple(path: str) -> Tuple[str]:
@@ -16,20 +16,17 @@ def path_tuple(path: str) -> Tuple[str]:
         return out
 
 
-class Archive:
-    ext = None
-    extras: Dict[str, external.File]
-
-    def __init__(self):
-        self.extras = dict()
+class Archive(files.ParsedFile):
+    archive: Archive
 
     def __repr__(self) -> str:
         descriptor = f"{len(self.namelist())} files"
+        if self.archive is not None:
+            archive_repr = " ".join([
+                self.archive.__class__.__name__,
+                f'"{self.archive.filename}"'])
+            descriptor += f" in {archive_repr}"
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
-
-    def extra_patterns(self) -> List[str]:
-        """filename patterns for files to mount (e.g. '*.bin')"""
-        return list()
 
     def extract(self, filename, to_path=None):
         if filename not in self.namelist():
@@ -44,18 +41,26 @@ class Archive:
         for filename in self.namelist():
             self.extract(filename, to_path)
 
-    def extract_all_matching(self, pattern="*.bsp", to_path=None, case_sensitive=False):
-        for filename in self.search(pattern, case_sensitive):
-            self.extract(filename, to_path)
+    def extract_all_matching(self, pattern: str, to_path=None, case_sensitive=False):
+        for filepath in self.search(pattern, case_sensitive):
+            self.extract(filepath, to_path)
 
-    def is_dir(self, filename: str) -> bool:
-        all_dirs = {path_tuple(fn)[:-1] for fn in self.namelist()}
-        all_dirs.update({tuple_[:i] for tuple_ in all_dirs for i in range(1, len(tuple_))})
-        all_dirs.update({path_tuple(root) for root in (".", "./", "/")})
-        return path_tuple(filename) in all_dirs
+    def is_dir(self, filepath: str) -> bool:
+        # NOTE: all_dirs could be a cached property
+        all_dirs = {
+            path_tuple(fn)[:-1]
+            for fn in self.namelist()}
+        all_dirs.update({
+            tuple_[:i]
+            for tuple_ in all_dirs
+            for i in range(1, len(tuple_))})
+        all_dirs.update({
+            path_tuple(root)
+            for root in (".", "./", "/")})
+        return path_tuple(filepath) in all_dirs
 
-    def is_file(self, filename: str) -> bool:
-        return filename in self.namelist()
+    def is_file(self, filepath: str) -> bool:
+        return filepath in self.namelist()
 
     def listdir(self, folder: str) -> List[str]:
         if not self.is_dir(folder):
@@ -78,9 +83,7 @@ class Archive:
                 folder_contents.add(subfolder)
         return sorted(folder_contents)
 
-    def mount_file(self, filename: str, external_file: external.File):
-        self.extras[filename] = external_file
-
+    @parse_first
     def namelist(self) -> List[str]:
         # NOTE: we assume namelist only contains filenames, no folders
         raise NotImplementedError("ArchiveClass has not defined .namelist()")
@@ -89,9 +92,10 @@ class Archive:
         return self.is_file(filename) or self.is_dir(filename)
 
     def read(self, filename: str) -> bytes:
+        """read the contents of a file inside archive"""
         raise NotImplementedError("ArchiveClass has not defined .read()")
 
-    def search(self, pattern="*.bsp", case_sensitive=False):
+    def search(self, pattern: str, case_sensitive: bool = False) -> List[str]:
         if case_sensitive:
             return [
                 path
@@ -111,48 +115,6 @@ class Archive:
             if self.is_dir(full_filename):
                 self.tree(full_filename, depth + 1)
 
-    def unmount_file(self, filename: str):
-        self.extras.pop(filename)
-
-    @classmethod
-    def from_archive(cls, parent_archive: Archive, filename: str) -> Archive:
-        """for ArchiveClasses composed of multiple files"""
-        archive = cls.from_bytes(parent_archive.read(filename))
-        folder = os.path.dirname(filename)
-        extras = [
-            filename
-            for filename in parent_archive.listdir(folder)
-            for pattern in archive.extra_patterns()
-            if fnmatch.fnmatch(filename.lower(), pattern.lower())]
-        for filename in extras:
-            full_filename = os.path.join(folder, filename)
-            external_file = external.File.from_archive(full_filename, parent_archive)
-            archive.mount_file(filename, external_file)
-        return archive
-
-    @classmethod
-    def from_bytes(cls, raw_archive: bytes) -> Archive:
-        return cls.from_stream(io.BytesIO(raw_archive))
-
-    @classmethod
-    def from_file(cls, filename: str) -> Archive:
-        archive = cls.from_stream(open(filename, "rb"))
-        folder = os.path.dirname(filename)
-        extras = [
-            filename
-            for filename in os.listdir(folder)
-            for pattern in archive.extra_patterns()
-            if fnmatch.fnmatch(filename.lower(), pattern.lower())]
-        for filename in extras:
-            full_filename = os.path.join(folder, filename)
-            external_file = external.File.from_file(full_filename)
-            archive.mount_file(filename, external_file)
-        return archive
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Archive:
-        raise NotImplementedError("ArchiveClass has not defined .from_stream()")
-
 
 class TrackMode(enum.Enum):
     AUDIO = 0
@@ -165,7 +127,8 @@ class Track:
     sector_size: int  # 2048, 2336 or 2352
     start_lba: int
     length: int  # in sectors, not bytes
-    name: str
+    name: str  # can be a filename
+    size: int = property(lambda s: s.length * s.sector_size)
 
     def __init__(self, mode, sector_size, start_lba, length, name):
         self.mode = mode
@@ -183,7 +146,6 @@ class Track:
 
     def data_slice(self) -> slice:
         """index raw sector with this slice to get just the data"""
-        # TODO: add sector sizes I forgot
         if self.mode == TrackMode.AUDIO or self.sector_size == 2048:
             return slice(0, self.sector_size)
         elif self.mode == TrackMode.BINARY_1:
@@ -193,16 +155,16 @@ class Track:
         return slice(header_size, 2048 + header_size)
 
 
-class DiscImage:
-    ext = None
-    extras: Dict[str, external.File]
-    tracks: List[Track]  # indexes extras with filename
+class DiscImage(files.ParsedFile):
+    archive: Archive
+    # new
+    tracks: List[Track]
     _cursor: Tuple[int, int]
     # ^ (track_index, sub_lba)
     # NOTE: true_lba = track.start_lba + sub_lba
 
-    def __init__(self):
-        self.extras = dict()
+    def __init__(self, filepath: str, archive=None, *args, **kwargs):
+        super().__init__(filepath, archive, *args, **kwargs)
         self.tracks = list()
         self._cursor = (0, 0)
 
@@ -210,6 +172,11 @@ class DiscImage:
         descriptor = f"{len(self)} sectors ({len(self.tracks)} tracks)"
         # TODO: length in MB / seconds
         # Red Book CD-DA: 44.1 KHz 16-bit PCM Stereo -> 176400 bytes / second
+        if self.archive is not None:
+            archive_repr = " ".join([
+                self.archive.__class__.__name__,
+                f'"{self.archive.filename}"'])
+            descriptor += f" in {archive_repr}"
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
     def __contains__(self, lba: int) -> bool:
@@ -223,6 +190,7 @@ class DiscImage:
         else:
             return 0
 
+    @parse_first
     def export_wav(self, track_index: int, filename: str = None):
         # https://docs.fileformat.com/audio/wav/
         track = self.tracks[track_index]
@@ -233,23 +201,22 @@ class DiscImage:
             else:
                 filename = f"track_{track_index:02d}.wav"
         # generate header
-        data_size = track.length * track.sector_size
         wav_header = [
-            b"RIFF", (data_size + 36).to_bytes(4, "little"), b"WAVEfmt ",
+            b"RIFF", (track.size + 36).to_bytes(4, "little"), b"WAVEfmt ",
             b"\x10\x00\x00\x00", b"\x01\x00", b"\x02\x00",
             (44100).to_bytes(4, "little"), (176400).to_bytes(4, "little"),
-            b"\x04\x00", b"\x10\x00", b"data", data_size.to_bytes(4, "little")]
-        data_stream = self.extras[track.name]
-        data_stream.seek(0)  # just in case
+            b"\x04\x00", b"\x10\x00", b"data", track.size.to_bytes(4, "little")]
+        self.sector_seek(track.start_lba)
         with open(filename, "wb") as wav_file:
             wav_file.write(b"".join(wav_header))
-            wav_file.write(data_stream.read())
+            wav_file.write(self.sector_read(track.length))
 
-    def extra_patterns(self) -> List[str]:
-        return [track.name for track in self.tracks]
-
-    def mount_file(self, filename: str, external_file: external.File):
-        self.extras[filename] = external_file
+    # NOTE: for FriendlyFile subclasses
+    @property
+    def friend_patterns(self) -> List[str]:
+        return {
+            track.name: files.DataType.BINARY
+            for track in self.tracks}
 
     def read(self, length: int = -1) -> bytes:
         """moves cursor to end of sector, use with caution"""
@@ -260,6 +227,22 @@ class DiscImage:
             sector_length += 1
         return self.sector_read(sector_length)[:length]
 
+    # NOTE: FriendlyFile subclasses should call this at the end of parsing
+    def recalc_track_lengths(self):
+        """get track lengths from filesizes (if nessecary)"""
+        if len(self.friends) == 0:
+            self.make_friends()
+        for track_index, track in enumerate(self.tracks):
+            if track.length == -1:  # unknown
+                try:
+                    file_size = self.friends[track.name].size
+                except KeyError:
+                    raise FileNotFoundError(f"couldn't find {track.name!r}")
+                assert file_size % track.sector_size == 0, f"{track=}, {file_size=}"
+                track.length = file_size // track.sector_size
+                self.tracks[track_index] = track
+
+    @parse_first
     def sector_read(self, length: int = -1) -> bytes:
         """expects length in sectors"""
         track_index, sub_lba = self._cursor
@@ -272,7 +255,7 @@ class DiscImage:
         if sub_lba + length > track.length:
             raise NotImplementedError("cannot read past end of current track")
         data_slice = track.data_slice()
-        track_stream = self.extras[track.name]
+        track_stream = self.friends[track.name].stream
         track_stream.seek(sub_lba * track.sector_size)
         sector_data = [
             track_stream.read(track.sector_size)[data_slice]
@@ -282,6 +265,7 @@ class DiscImage:
         self._cursor = (track_index, sub_lba + length)
         return b"".join(sector_data)
 
+    @parse_first
     def sector_seek(self, lba: int, whence: int = 0) -> int:
         assert whence in (0, 1, 2)
         current_lba = self.sector_tell()
@@ -295,62 +279,8 @@ class DiscImage:
                 return lba
         raise RuntimeError(f"couldn't find a track containing sector: {lba}")
 
+    @parse_first
     def sector_tell(self) -> int:
         track_index, sub_lba = self._cursor
         track = self.tracks[track_index]
         return track.start_lba + sub_lba
-
-    def unmount_file(self, filename: str):
-        self.extras.pop(filename)
-
-    @classmethod
-    def from_archive(cls, parent_archive: Archive, filename: str) -> DiscImage:
-        disc = cls.from_bytes(parent_archive.read(filename))
-        folder = os.path.dirname(filename)
-        extras = [
-            filename
-            for filename in parent_archive.listdir(folder)
-            for pattern in disc.extra_patterns()
-            if fnmatch.fnmatch(filename.lower(), pattern.lower())]
-        for filename in extras:
-            full_filename = os.path.join(folder, filename)
-            external_file = external.File.from_archive(full_filename, parent_archive)
-            disc.mount_file(filename, external_file)
-        # get track lengths from filesizes (if nessecary)
-        for track_index, track in enumerate(disc.tracks):
-            if track.length == -1:
-                file_size = disc.extras[track.name].size
-                assert file_size % track.sector_size == 0, f"{track=}, {file_size=}"
-                track.length = file_size // track.sector_size
-                disc.tracks[track_index] = track
-        return disc
-
-    @classmethod
-    def from_bytes(cls, raw_data: bytes) -> DiscImage:
-        return cls.from_stream(io.BytesIO(raw_data))
-
-    @classmethod
-    def from_file(cls, filename: str) -> DiscImage:
-        # NOTE: I don't expect "/dev/sr0" or "/dev/cdrom" to work
-        disc = cls.from_stream(open(filename, "rb"))
-        folder = os.path.dirname(filename)
-        extras = [
-            filename
-            for filename in os.listdir(folder)
-            for pattern in disc.extra_patterns()
-            if fnmatch.fnmatch(filename.lower(), pattern.lower())]
-        for filename in extras:
-            full_filename = os.path.join(folder, filename)
-            external_file = external.File.from_file(full_filename)
-            disc.mount_file(filename, external_file)
-        # get track lengths from filesizes (if nessecary)
-        for track_index, track in enumerate(disc.tracks):
-            if track.length == -1:
-                assert disc.extras[track.name].size % track.sector_size == 0
-                track.length = disc.extras[track.name].size // track.sector_size
-                disc.tracks[track_index] = track
-        return disc
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> DiscImage:
-        raise NotImplementedError("DiscClass has not defined .from_stream()")

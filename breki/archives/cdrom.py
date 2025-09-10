@@ -8,8 +8,8 @@ import io
 import os
 from typing import List
 
-from .. import external
-from ..utils import binary
+from .. import binary
+from ..files.parsed import parse_first
 from . import base
 
 
@@ -331,40 +331,40 @@ class PrimaryVolumeDescriptor:
 
 
 class Iso(base.Archive):
-    ext = "*.iso"  # sometimes "*.bin"
+    exts = ["*.iso", "*.bin"]
     lba_offset: int  # added to LBA when seeking disc
     disc: base.DiscImage
     pvd: PrimaryVolumeDescriptor
     path_table: List[PathTableEntry]
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, **kwargs):
+        super().__init__(filepath, archive, **kwargs)
+        self.disc = None
         self.lba_offset = 0
-        # TODO: default disc image data (an empty formatted disc)
-        self.disc = base.DiscImage()
-        # TODO: default PVD
         self.path_table = list()
 
     def __repr__(self) -> str:
         descriptor = f"{self.pvd.name!r} {len(self.namelist())} files"
         return f"<Iso {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def folder_records(self, search_folder: str) -> List[Directory]:
         # NOTE: search_folder is case sensitive
-        # TEST: "" & "/" should both index root
-        # -- maybe also "." & "./"
-        # TODO: is it easier to walk the directory tree?
+        # TEST: "", "/", "." & "./" should all index root
+        # TODO: is it easier to just walk the directory tree?
         search_folder.replace("\\", "/")
         if search_folder.startswith("./"):
             search_folder = search_folder[2:]
         search_folder = f"/{search_folder}/"
-        while "//" in search_folder:  # eliminate double slashes
-            # NOTE: have to replace twice for root ("/")
+        search_folder = search_folder.replace("/./", "/")
+        while "//" in search_folder:  # single slashes only
             search_folder = search_folder.replace("//", "/")
         folders = [self.full_path(i) for i, path in enumerate(self.path_table)]
         assert search_folder in folders, f"couldn't find {search_folder!r}"
         path_index = folders.index(search_folder)
         return self.path_records(path_index)
 
+    @parse_first
     def full_path(self, path_table_index: int) -> str:
         if path_table_index == 0:
             return "/"
@@ -375,6 +375,7 @@ class Iso(base.Archive):
             names.append(path.name)
         return "/" + "/".join(reversed(names)) + "/"
 
+    @parse_first
     def listdir(self, search_folder: str) -> List[str]:
         if search_folder in (".", "./"):
             search_folder = "/"  # valid root
@@ -386,6 +387,7 @@ class Iso(base.Archive):
             f.name if f.is_file else f"{f.name}/"
             for f in records[2:]]
 
+    @parse_first
     def namelist(self) -> List[str]:
         filenames = set()
         for i, path in enumerate(self.path_table):
@@ -395,6 +397,7 @@ class Iso(base.Archive):
                     filenames.add(path_name + record.name)
         return sorted(filenames)
 
+    @parse_first
     def path_records(self, path_index: int) -> List[Directory]:
         path = self.path_table[path_index]
         self.sector_seek(path.extent_lba)
@@ -410,9 +413,10 @@ class Iso(base.Archive):
         assert stream.tell() != 2048
         return records
 
-    def read(self, filename: str) -> bytes:
+    @parse_first
+    def read(self, filepath: str) -> bytes:
         # NOTE: case sensitive
-        folder, filename = os.path.split(filename)
+        folder, filename = os.path.split(filepath)
         records = {r.name: r for r in self.folder_records(folder)}
         assert filename in records, "file not found"
         record = records[filename]
@@ -424,70 +428,47 @@ class Iso(base.Archive):
         assert len(data) == record.data_size, "unexpected EOF"
         return data
 
+    @parse_first
     def sector_seek(self, lba: int) -> int:
+        if not self.disc.is_parsed:
+            self.disc.parse()
         return self.disc.sector_seek(lba + self.lba_offset)
 
-    @classmethod
-    def from_archive(cls, parent_archive, filename, pvd_sector=16, lba_offset=0) -> Iso:
-        disc = base.DiscImage()
-        disc.extras = {filename: external.File.from_archive(filename, parent_archive)}
-        assert disc.extras[filename].size % 2048 == 0, "unexpected EOF"
-        length = disc.extras[filename].size // 2048
-        disc.tracks = [base.Track(base.TrackMode.BINARY_1, 2048, 0, length, filename)]
-        return cls.from_disc(disc, pvd_sector, lba_offset)
-
-    @classmethod
-    def from_bytes(cls, raw_iso: bytes, pvd_sector=16, lba_offset=0) -> Iso:
-        disc = base.DiscImage()
-        disc.extras = {":memory:": external.File.from_bytes(":memory:", raw_iso)}
-        assert disc.extras[":memory:"].size % 2048 == 0, "unexpected EOF"
-        length = disc.extras[":memory:"].size // 2048
-        disc.tracks = [base.Track(base.TrackMode.BINARY_1, 2048, 0, length, ":memory:")]
-        return cls.from_disc(disc, pvd_sector, lba_offset)
-
-    @classmethod
-    def from_disc(cls, disc: base.DiscImage, pvd_sector=16, lba_offset=0) -> Iso:
-        out = cls()
-        out.disc = disc
-        out.lba_offset = lba_offset
-        out.disc.sector_seek(pvd_sector)
+    def parse(self, pvd_sector=16, lba_offset=0):
+        self.is_parsed = True
+        self.lba_offset = lba_offset
+        if self.disc is None:  # self.stream -> 1 track DiscImage
+            self.disc = base.DiscImage()
+            assert self.size % 2048 == 0, "unexpected EOF"
+            length = self.size // 2048
+            self.disc.tracks = [
+                base.Track(base.TrackMode.BINARY_1, 2048, 0, length, self.filename)]
+            self.disc.friends = {self.filename: self}
+            self.disc.parse()
+        self.disc.sector_seek(pvd_sector)
         # pvd
-        out.pvd = PrimaryVolumeDescriptor.from_bytes(out.disc.sector_read(1))
-        assert out.pvd.block_size == 2048, "unexpected pvd block size"
+        self.pvd = PrimaryVolumeDescriptor.from_bytes(self.disc.sector_read(1))
+        assert self.pvd.block_size == 2048, "unexpected pvd block size"
         # verify other VolumeDescriptors / terminator
-        terminator = out.disc.sector_read(1)[:7]
+        terminator = self.disc.sector_read(1)[:7]
         while terminator != b"\xFFCD001\x01":
             assert terminator[1:] == b"CD001\x01", "Couldn't find next VolumeDescriptor"
             assert terminator[0] in (0x02, 0x03), f"0x{terminator[0]:02X} is not a valid VolumeDescriptor type"
             # NOTE: 0x02: Supplementary, 0x03: Partition, 0x04..0xFE: Reserved
-            # TODO: userwarning / add to Iso.import_log somehow
-            print("skipping", {0x02: "Supplementary", 0x03: "Partition"}[terminator[0]], "Volume Descriptor")
-            terminator = out.disc.sector_read(1)[:7]
+            self.log.append("skipping", {0x02: "Supplementary", 0x03: "Partition"}[terminator[0]], "Volume Descriptor")
+            terminator = self.disc.sector_read(1)[:7]
         # path table
-        out.sector_seek(out.pvd.path_table_le_lba)
-        raw_path_table = out.disc.read(out.pvd.path_table_size)
+        self.sector_seek(self.pvd.path_table_le_lba)
+        raw_path_table = self.disc.read(self.pvd.path_table_size)
         path_table_stream = io.BytesIO(raw_path_table)
-        while path_table_stream.tell() < out.pvd.path_table_size:
+        while path_table_stream.tell() < self.pvd.path_table_size:
             entry = PathTableEntry.from_stream(path_table_stream)
-            out.path_table.append(entry)
-        assert path_table_stream.tell() == out.pvd.path_table_size
+            self.path_table.append(entry)
+        assert path_table_stream.tell() == self.pvd.path_table_size
         # NOTE: we're ignoring the optional path table & all the big-endian stuff
+
+    @classmethod
+    def from_disc(cls, disc: base.DiscImage):
+        out = cls(disc.filename)
+        out.disc = disc
         return out
-
-    @classmethod
-    def from_file(cls, filename: str, pvd_sector=16, lba_offset=0) -> Iso:
-        disc = base.DiscImage()
-        disc.extras = {filename: external.File.from_file(filename)}
-        assert disc.extras[filename].size % 2048 == 0, "unexpected EOF"
-        length = disc.extras[filename].size // 2048
-        disc.tracks = [base.Track(base.TrackMode.BINARY_1, 2048, 0, length, filename)]
-        return cls.from_disc(disc, pvd_sector, lba_offset)
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO, pvd_sector=16, lba_offset=0) -> Iso:
-        disc = base.DiscImage()
-        disc.extras = {":memory:": external.File.from_stream(":memory:", stream)}
-        assert disc.extras[":memory:"].size % 2048 == 0, "unexpected EOF"
-        length = disc.extras[":memory:"].size // 2048
-        disc.tracks = [base.Track(base.TrackMode.BINARY_1, 2048, 0, length, ":memory:")]
-        return cls.from_disc(disc, pvd_sector, lba_offset)

@@ -1,5 +1,5 @@
 __all__ = [
-    "binary", "core", "files", "libraries",
+    "archives", "binary", "core", "files", "libraries",
     "find_all", "read_str", "read_struct", "write_struct", "xxd",
     "BitField", "Struct", "MappedArray",
     "CodePage", "DataType", "File", "FriendlyFile",
@@ -10,6 +10,7 @@ __all__ = [
     "TextFile", "FriendlyTextFile"]
 
 # modules
+from . import archives
 from . import binary
 from . import core
 from . import files

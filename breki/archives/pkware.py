@@ -1,55 +1,59 @@
 from __future__ import annotations
+import functools
 import io
-from typing import Any
+from typing import List
 import zipfile
 
+from .. import files
+from ..files.parsed import parse_first
 from . import base
 
 
-class Zip(zipfile.ZipFile, base.Archive):
-    ext = "*.zip"
-    _buffer: io.BytesIO  # copy of raw data as a byte stream
+class Zip(base.Archive, files.BinaryFile):
+    exts = ["*.zip"]
 
-    def __init__(self, file_: Any = None, mode: str = "a", **kwargs):
-        # wrapping ZipFile.__init__ so we always have the raw bytes & can init w/ no args
-        # this specific implementation is meant to comply w/ the needs of valve.source PAKFILE
-        # since I only feel like implementing a zipfile w/ .from_bytes once
-        if file_ is None:  # create an empty zipfile
-            empty_zip = [b"PK\x05\x06", b"\x00" * 16, b"\x20\x00XZP1 0", b"\x00" * 26]
-            self._buffer = io.BytesIO(b"".join(empty_zip))
-        elif isinstance(file_, io.BytesIO):  # BspClass will take this route via .from_bytes()
-            self._buffer = file_
-        elif isinstance(file_, str):  # save a copy of source file bytes if initialising from file
-            self._buffer = io.BytesIO(open(file_, "rb").read())
-        else:
-            raise TypeError(f"Cannot create {self.__class__.__name__} from type '{type(file_)}'")
-        super().__init__(self._buffer, mode=mode, **kwargs)
+    def _get_stream(self, type_=None) -> files.DataStream:
+        try:
+            return super()._get_stream(type_)
+        except FileNotFoundError:
+            return io.BytesIO(b"".join([
+                b"PK\x05\x06", b"\x00" * 16,
+                b"\x20\x00XZP1 0", b"\x00" * 26]))
+
+    stream = functools.cached_property(_get_stream)
+
+    @parse_first
+    def namelist(self) -> List[str]:
+        return self._zip.namelist()
+
+    @parse_first
+    def read(self, filepath: str) -> bytes:
+        return self._zip.read(filepath)
+
+    def parse(self, mode: str = "a", **kwargs):
+        self._zip = zipfile.ZipFile(self.stream, mode=mode, **kwargs)
 
     def __repr__(self) -> str:
-        return f"<{self.__class__.__name__} {len(self.namelist())} files mode='{self.mode}' @ 0x{id(self):016X}>"
+        descriptor = f"{len(self.namelist())} files mode='{self._zip.mode}'"
+        if self.archive is not None:
+            archive_repr = " ".join([
+                self.archive.__class__.__name__,
+                f'"{self.archive.filename}"'])
+            descriptor += f" in {archive_repr}"
+        return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
     def as_bytes(self) -> bytes:
         # write ending records if edits were made (adapted from ZipFile.close)
-        if self.mode in "wxa" and self._didModify and self.fp is not None:
-            with self._lock:
-                if self._seekable:
-                    self.fp.seek(self.start_dir)
-                self._write_end_record()
-        self._didModify = False  # don't double up when .close() is called
-        # NOTE: .close() can get funky but it's OK because ._buffer isn't a real file
-        return self._buffer.getvalue()
+        if self._zip.mode in "wxa" and self._zip._didModify and self._zip.fp is not None:
+            with self._zip._lock:
+                if self._zip._seekable:
+                    self._zip.fp.seek(self._zip.start_dir)
+                self._zip._write_end_record()
+        self._zip._didModify = False  # don't double up when .close() is called
+        # NOTE: _zip.close() can get funky but it's OK because .stream isn't a real file
+        self.stream.seek(0)
+        return self.stream.read()
 
+    @parse_first
     def sizeof(self, filename: str) -> int:
-        return self.getinfo(filename).file_size
-
-    @classmethod
-    def from_bytes(cls, raw_lump: bytes) -> Zip:
-        return cls(io.BytesIO(raw_lump))
-
-    @classmethod
-    def from_file(cls, filename: str) -> Zip:
-        return cls(filename)
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Zip:
-        return cls(stream)
+        return self._zip.getinfo(filename).file_size
