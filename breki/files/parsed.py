@@ -3,9 +3,18 @@ import fnmatch
 import functools
 import io
 import os
-from typing import Any, Dict, List
+from typing import Dict, List
 
 from . import base
+
+
+def parse_first(method):
+    def wrapper(self, *args, **kwargs):
+        if not self.is_parsed:
+            self.parse()
+            self.is_parsed = True
+        return method(self, *args, **kwargs)
+    return wrapper
 
 
 class ParsedFile(base.File):
@@ -13,16 +22,12 @@ class ParsedFile(base.File):
     # ^ ["*.ext"]
     # NOTE: just a hint, not enforced
     is_parsed: bool
+    log: List[str]
 
     def __init__(self, filepath: str, archive=None, code_page=None):
         super().__init__(filepath, archive, code_page)
         self.is_parsed = False
-
-    def __getattr__(self, attr: str) -> Any:
-        if not self.is_parsed:
-            self.parse()
-            self.is_parsed = True
-        return getattr(self, attr)
+        self.log = list()
 
     def as_bytes(self) -> bytes:
         """unparser"""
@@ -225,15 +230,17 @@ class HybridFile(ParsedFile):
         raise NotImplementedError()
         self.is_parsed = True
 
-    @functools.cached_property
-    def stream(self) -> base.DataStream:
+    def _get_stream(self, type_=None) -> base.DataStream:
         """deferring opening the file until it's touched"""
-        out = super().stream
-        if self.type == base.DataType.EITHER:
-            type_ = self.identify(self.filename, out)
-            out = super()._get_stream(type_)
-            self.type = type_
-        return out
+        type_ = self.type if type_ is None else type_
+        stream = super()._get_stream(type_)
+        if type_ == base.DataType.EITHER:
+            type_ = self.identify(self.filename, stream)
+            stream = super()._get_stream(type_)
+        self.type = type_
+        return stream
+
+    stream = functools.cached_property(_get_stream)
 
     # initialisers
     @classmethod

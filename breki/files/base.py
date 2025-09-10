@@ -1,10 +1,9 @@
 from __future__ import annotations
 import enum
-import fnmatch
 import functools
 import io
 import os
-from typing import Dict, List, Union
+from typing import List, Union
 
 
 TextStream = Union[io.StringIO, io.TextIOWrapper]
@@ -66,7 +65,6 @@ class File:
         folder, filename = os.path.split(filepath)
         self.folder = folder if folder != "" else "."
         self.filename = filename
-        self.size = 0
         self.code_page = self.code_page if code_page is None else code_page
 
     def __repr__(self) -> str:
@@ -91,6 +89,8 @@ class File:
             mode = "rb" if type_ != DataType.TEXT else "r"
             out = open(filepath, mode)
         else:
+            if not self.archive.is_parsed:
+                self.archive.parse()
             raw_bytes = self.archive.read(filepath)
             if type_ == DataType.TEXT:
                 raw_text = self.code_page.decode(raw_bytes)
@@ -102,6 +102,18 @@ class File:
 
     stream = functools.cached_property(_get_stream)
 
+    @functools.cached_property
+    def filepath(self) -> str:
+        return os.path.join(self.folder, self.filename)
+
+    @functools.cached_property
+    def size(self) -> int:
+        if self.archive is None:
+            size = os.path.getsize(self.filepath)
+        else:
+            size = self.archive.sizeof(self.filepath)
+        return size
+
     # initialisers
     # NOTE: all initialisers must provide a filepath
     @classmethod
@@ -110,7 +122,6 @@ class File:
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
         out = cls(filepath, archive, code_page)
-        out.size = archive.sizeof(filepath)
         out.type = type_
         return out
 
