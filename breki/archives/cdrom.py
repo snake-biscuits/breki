@@ -332,6 +332,7 @@ class PrimaryVolumeDescriptor:
 
 class Iso(base.Archive):
     exts = ["*.iso", "*.bin"]
+    pvd_sector: int
     lba_offset: int  # added to LBA when seeking disc
     disc: base.DiscImage
     pvd: PrimaryVolumeDescriptor
@@ -342,7 +343,10 @@ class Iso(base.Archive):
         self.disc = None
         self.lba_offset = 0
         self.path_table = list()
+        self.pvd_sector = 16
+        # TODO: default pvd for __repr__
 
+    @parse_first
     def __repr__(self) -> str:
         descriptor = f"{self.pvd.name!r} {len(self.namelist())} files"
         return f"<Iso {descriptor} @ 0x{id(self):016X}>"
@@ -434,9 +438,8 @@ class Iso(base.Archive):
             self.disc.parse()
         return self.disc.sector_seek(lba + self.lba_offset)
 
-    def parse(self, pvd_sector=16, lba_offset=0):
+    def parse(self):
         self.is_parsed = True
-        self.lba_offset = lba_offset
         if self.disc is None:  # self.stream -> 1 track DiscImage
             self.disc = base.DiscImage()
             assert self.size % 2048 == 0, "unexpected EOF"
@@ -445,7 +448,7 @@ class Iso(base.Archive):
                 base.Track(base.TrackMode.BINARY_1, 2048, 0, length, self.filename)]
             self.disc.friends = {self.filename: self}
             self.disc.parse()
-        self.disc.sector_seek(pvd_sector)
+        self.disc.sector_seek(self.pvd_sector)
         # pvd
         self.pvd = PrimaryVolumeDescriptor.from_bytes(self.disc.sector_read(1))
         assert self.pvd.block_size == 2048, "unexpected pvd block size"

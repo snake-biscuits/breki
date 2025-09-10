@@ -4,8 +4,9 @@ import enum
 import io
 from typing import Dict, List
 
+from .. import binary
 from .. import core
-from ..utils import binary
+from .. import files
 from . import base
 
 
@@ -117,7 +118,7 @@ class CompressedMapEntryv5:
         return out
 
 
-class Chd(base.DiscImage):
+class Chd(base.DiscImage, files.BinaryFile):
     """Compressed Hunks of Data"""
     ext = "*.chd"
     header: ChdHeaderv5
@@ -129,23 +130,18 @@ class Chd(base.DiscImage):
         self.tracks = list()
         self._cursor = (0, 0)
 
-    def extra_patterns(self) -> List[str]:
-        return list()
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Chd:
-        magic, header_length, header_version = binary.read_struct(stream, ">8s2I")
+    def parse(self):
+        magic, header_length, header_version = binary.read_struct(self.stream, ">8s2I")
         assert magic == b"MComprHD"
         assert header_version == 5, "only supporting v5"
         assert header_length == 124, "incorrect header size for v5"
-        out = cls()
-        out.header = ChdHeaderv5.from_stream(stream)
+        self.header = ChdHeaderv5.from_stream(self.stream)
         # metadata
-        stream.seek(out.header.meta_offset)
-        metadata = Metadata.from_stream(stream)
+        self.stream.seek(self.header.meta_offset)
+        metadata = Metadata.from_stream(self.stream)
         while metadata.next != 0:
-            out.metadata.append(metadata)
-            metadata = Metadata.from_stream(stream)
+            self.metadata.append(metadata)
+            metadata = Metadata.from_stream(self.stream)
         # TODO: CHGD & CHTR -> Track
         # TODO: track data -> extras
         # NOTE: https://github.com/mamedev/mame/blob/master/src/lib/util/chd.cpp#L2489
@@ -153,11 +149,12 @@ class Chd(base.DiscImage):
         # NOTE: https://github.com/mamedev/mame/blob/master/src/lib/util/chd.cpp#L2168
         # -- decompress_v5_map
         # --- seek to map offset
-        stream.seek(out.header.map_offset)
-        if out.header.compressors[0] != b"\x00" * 4:  # data is compressed
-            out.map_header = CompressedMapHeaderv5.from_stream(stream)
-            out.raw_map = stream.read(out.map_header.length)
-            assert len(out.raw_map) == out.map_header.length  # should hit EOF exactly
+        self.stream.seek(self.header.map_offset)
+        if self.header.compressors[0] != b"\x00" * 4:  # data is compressed
+            self.map_header = CompressedMapHeaderv5.from_stream(self.stream)
+            self.raw_map = self.stream.read(self.map_header.length)
+            assert len(self.raw_map) == self.map_header.length
+            assert self.stream.tell() == self.size, "didn't hit EOF"
             # TODO: decompress Huffman encoded CompressedMapEntryv5 etc.
         # INITIALISE DECOMPRESSORS
         # NOTE: https://github.com/mamedev/mame/blob/master/src/lib/util/chdcodec.cpp#L406
@@ -171,9 +168,9 @@ class Chd(base.DiscImage):
         else:
             # TODO: need an uncompressed .chd to test
             raise NotImplementedError("Cannot parse uncompressed Map")
-        return out
 
     @property
     def is_gdrom(self) -> bool:
-        metadata_magics = {md.magic for md in self.metadata}
-        return any(magic in metadata_magics for magic in (b"CHGD", b"CHGT"))
+        return any(
+            md.magic in (b"CHGD", b"CHGT")
+            for md in self.metadata)

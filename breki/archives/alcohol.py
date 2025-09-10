@@ -5,7 +5,8 @@ import enum
 import io
 from typing import List
 
-# from .. import core
+from .. import core
+from .. import files
 from . import base
 
 
@@ -17,26 +18,25 @@ class MediaType(enum.Enum):
     DVD_R = 18
 
 
-# class MdsHeader(core.Struct):
-#     __slots__ = [
-#         "magic", "version", "media_type", "num_sessions",
-#         "unknown_1", "bca_length", "unknown_2", "bca_offset",
-#         "unknown_3", "disc_struct_offset", "unknown_4",
-#         "sessions_offset", "dpm_offset"]
-#     _format = "16s2B2HIH15I"  # 88 bytes
-#     _arrays = {
-#         "version": ["major", "minor"],
-#         "unknown_2": 2, "unknown_3": 6, "unknown_4": 3}
-#     _classes = {
-#         "media_type": MediaType}
+class MdsHeader(core.Struct):
+    __slots__ = [
+        "magic", "version", "media_type", "num_sessions",
+        "unknown_1", "bca_length", "unknown_2", "bca_offset",
+        "unknown_3", "disc_struct_offset", "unknown_4",
+        "sessions_offset", "dpm_offset"]
+    _format = "16s2B2HIH15I"  # 88 bytes
+    _arrays = {
+        "version": ["major", "minor"],
+        "unknown_2": 2, "unknown_3": 6, "unknown_4": 3}
+    _classes = {"media_type": MediaType}
 
 
-# class MdsSessionHeader(core.Struct):
-#     __slots__ = [
-#         "first_sector", "last_sector", "num_sessions", "num_tracks",
-#         "num_tracks_2", "first_track", "last_track", "unknown",
-#         "tracks_offset"]
-#     _format = "2IH2B2H2I"
+class MdsSessionHeader(core.Struct):
+    __slots__ = [
+        "first_sector", "last_sector", "num_sessions", "num_tracks",
+        "num_tracks_2", "first_track", "last_track", "unknown",
+        "tracks_offset"]
+    _format = "2IH2B2H2I"
 
 
 class TrackMode(enum.Enum):
@@ -50,49 +50,46 @@ class TrackMode(enum.Enum):
     MODE2_SUB = 0xEC  # Mode2 w/ subchannels
 
 
-# class MdsTrack(core.Struct):
-#     index: int  # track_number
-#     __slots__ = [
-#         "mode", "num_subchannels", "adr", "index", "point_number",
-#         "minutes", "seconds", "frames", "zero", "pmin", "psec", "pframe",
-#         "index_block_offset", "sector_size", "unknown_1", "first_sector",
-#         "sector_offset", "num_filenames", "filenames_offset", "unknown_2"]
-#     _format = "12BI10HIQ2I6I"
-#     _arrays = {
-#         "unknown_1": 9, "unknown_2": 6}
-#     _classes = {
-#         "mode": TrackMode}
+class MdsTrack(core.Struct):
+    index: int  # track_number
+    __slots__ = [
+        "mode", "num_subchannels", "adr", "index", "point_number",
+        "minutes", "seconds", "frames", "zero", "pmin", "psec", "pframe",
+        "index_block_offset", "sector_size", "unknown_1", "first_sector",
+        "sector_offset", "num_filenames", "filenames_offset", "unknown_2"]
+    _format = "12BI10HIQ2I6I"
+    _arrays = {"unknown_1": 9, "unknown_2": 6}
+    _classes = {"mode": TrackMode}
+
+    # TODO: load filenames w/ .from_stream
 
 
-class Mds(base.DiscImage):
+class Mds(base.DiscImage, files.BinaryFile):
     """Media Descriptor Sidecar"""
     ext = "*.mds"
     # NOTE: needs linked .mdf (Media Descriptor File) data files
     _file: io.BytesIO  # DEBUG
-    # header: MdsHeader
-    # session_header: MdsSessionHeader  # 1x, not per-session?
-    # tracks: List[MdsTrack]
+    header: MdsHeader
+    session_header: MdsSessionHeader  # 1x, not per-session?
+    tracks: List[MdsTrack]
     filenames: List[str]
 
     def __init__(self):
         self.tracks = list()
         self.filenames = list()
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Mds:
+    def parse(self):
+        self.is_parsed = True
+        self.header = MdsHeader.from_stream(self.stream)
+        assert self.header.magic == b"MEDIA DESCRIPTOR"
+        assert self.header.version.major == 1
+        assert self.header.version.minor == 3
+        # sessions
+        self.stream.seek(self.header.sessions_offset, 1)
+        self.session_header = MdsSessionHeader.from_stream(self.stream)
+        self.stream.seek(self.session_header.tracks_offset, 1)
+        self.tracks = [
+            MdsTrack.from_stream(self.stream)
+            for i in range(self.session_header.num_tracks)]
+        # TODO: self.friends (Mdf?)
         raise NotImplementedError()
-        disc = cls()
-        # disc.header = MdsHeader.from_stream(stream)
-        # assert disc.header.magic == b"MEDIA DESCRIPTOR"
-        # assert disc.header.version.major == 1
-        # assert disc.header.version.minor == 3
-        # # sessions
-        # stream.seek(disc.header.sessions_offset, 1)
-        # disc.session_header = MdsSessionHeader.from_stream(stream)  # incorrect?
-        # # stream.seek(disc.session_header.tracks_offset, 1)
-        # # disc.tracks = [
-        # #     MdsTrack.from_stream(stream)
-        # #     for i in range(disc.session_header.num_tracks)]
-        # # TODO: filenames
-        disc._file = stream  # DEBUG
-        return disc

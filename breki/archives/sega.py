@@ -2,11 +2,12 @@
 # https://multimedia.cx/eggs/understanding-the-dreamcast-gd-rom-layout/
 
 from __future__ import annotations
+import fnmatch
 import io
-import os
 from typing import List
 
-from .. import external
+from .. import files
+from ..files.parsed import parse_first
 from . import alcohol
 from . import base
 from . import cdrom
@@ -15,17 +16,15 @@ from . import mame
 from . import padus
 
 
-class Gdi(base.DiscImage):
+class Gdi(base.DiscImage, files.TextFile):
     ext = "*.gdi"
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Gdi:
-        out = cls()
-        num_tracks = int(stream.readline().decode())
+    def parse(self):
+        num_tracks = int(self.stream.readline().decode())
         modes = {
             "0": base.TrackMode.AUDIO,
             "4": base.TrackMode.BINARY_1}
-        for i, line in enumerate(stream):
+        for i, line in enumerate(self.stream):
             line = line.decode().rstrip()
             assert line.count(" ") == 5
             track_number, start_lba, mode, sector_size, name, zero = line.split(" ")
@@ -35,9 +34,8 @@ class Gdi(base.DiscImage):
             sector_size = int(sector_size)
             start_lba = int(start_lba)
             # NOTE: length of -1 means we get it from filesize
-            out.tracks.append(base.Track(mode, sector_size, start_lba, -1, name))
-        assert len(out.tracks) == num_tracks
-        return out
+            self.tracks.append(base.Track(mode, sector_size, start_lba, -1, name))
+        assert len(self.tracks) == num_tracks
 
 
 # Boot Header
@@ -103,106 +101,101 @@ class Header:
         return out
 
 
-disc_classes = {
-    ".cdi": padus.Cdi,
-    ".chd": mame.Chd,
-    ".cue": golden_hawk.Cue,
-    ".gdi": Gdi,
-    ".mds": alcohol.Mds}
-# NOTE: currently using GDRom
-
-
-class GDRom(base.Archive):
+class GDRom(base.Archive, files.HybridFile):
     """DiscImage wrapper for GD-ROM filesystems"""
-    ext = "*.gdi"
-    exts = ["*.cdi", "*.chd", "*.cue", "*.gdi", "*.mds"]
-    # NOTE: also raw *.iso disc images
+    exts = {
+        "*.cdi": files.DataType.BINARY,
+        "*.chd": files.DataType.BINARY,
+        "*.cue": files.DataType.TEXT,
+        "*.gdi": files.DataType.TEXT,
+        "*.iso": files.DataType.BINARY,
+        "*.mds": files.DataType.BINARY}
+    # TODO: derive exts dict (w/ types) from disc_classes
+    disc_classes = {
+        "*.cdi": padus.Cdi,
+        "*.chd": mame.Chd,
+        "*.cue": golden_hawk.Cue,
+        "*.iso": cdrom.Iso,
+        "*.gdi": Gdi,
+        "*.mds": alcohol.Mds}
     disc: base.DiscImage
     cd_rom: cdrom.Iso  # CD-ROM filesystem @ lba 0
     gd_rom: cdrom.Iso  # GD-ROM filesystem @ lba 45000
     # TODO: filesystems: List[cdrom.Iso]  # sometimes you get 3
     header: Header
 
-    # TODO: __init__ w/ defaults (equivalent to a blank GD-ROM)
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page=None)
+        # TODO: defaults equivalent to a blank GD-ROM
+        self.disc = None
+        self.cd_rom = None
+        self.gd_rom = None
+        self.header = None
 
+    @parse_first
     def __repr__(self):
         descriptor = " ".join(
             getattr(self.header, attr)
             for attr in ("product_number", "game", "version"))
         return f"<GDRom {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def listdir(self, search_folder: str) -> List[str]:
         return self.gd_rom.listdir(search_folder)
 
+    @parse_first
     def namelist(self) -> List[str]:
         return self.gd_rom.namelist()
 
+    @parse_first
     def read(self, filename: str) -> bytes:
         return self.gd_rom.read(filename)
 
-    @classmethod
-    def from_archive(cls, parent_archive: base.Archive, filename: str) -> GDRom:
-        ext = os.path.splitext(filename.lower())[-1]
-        if ext == ".cdi":
-            cdi = padus.Cdi.from_archive(parent_archive, filename)
-            return cls.from_cdi(cdi)
-        elif ext in disc_classes:
-            disc = disc_classes[ext].from_archive(parent_archive, filename)
-            return cls.from_disc(disc)
+    def parse(self):
+        if self.disc is None:
+            for pattern, disc_class in self.disc_classes.items():
+                if fnmatch.fnmatch(self.filename, pattern):
+                    break  # use disc_class matching pattern
+            else:  # default to Iso
+                disc_class = cdrom.Iso
+            if self.archive is None:
+                self.disc = disc_class.from_stream(self.filepath, self.stream)
+            else:
+                self.disc = disc_class.from_archive(self.archive, self.filepath)
+        if isinstance(self.disc, padus.Cdi):
+            self.parse_cdi()
         else:
-            raise RuntimeError(f"Unsupported file extension: {ext}")
+            self.parse_disc()
+        self.type = self.disc.type
 
-    @classmethod
-    def from_bytes(cls, raw_gdrom: bytes) -> GDRom:
-        disc = base.DiscImage()
-        disc.extras = {":memory:": external.File.from_bytes(":memory:", raw_gdrom)}
-        assert disc.extras[":memory:"].size % 2048 == 0, "unexpected EOF"
-        length = disc.extras[":memory:"].size // 2048
-        disc.tracks = [base.Track(base.TrackMode.BINARY_1, 2048, 0, length, ":memory:")]
-        return cls.from_disc(disc)
-
-    @classmethod
-    def from_cdi(cls, cdi: padus.Cdi) -> GDRom:
+    def parse_cdi(self):
         # DEBUG: the 1 .cdi I'm testing doesn't start the GD-ROM area @ 45000
-        assert "Session 02 Track 01" in cdi.extras
+        assert "Session 02 Track 01" in self.disc.extras
         # NOTE: should be 2 sessions (cd_rom & gd_rom)
-        data_track = {track.name: track for track in cdi.tracks}["Session 02 Track 01"]
+        data_track = {track.name: track for track in self.disc.tracks}["Session 02 Track 01"]
         assert data_track.mode != base.TrackMode.AUDIO
         # build the GD-ROM
-        out = cls()
-        out.disc = cdi
         # TODO: check for a binary track at the start of the cd_rom sectors
-        out.cd_rom = None
-        out.gd_rom = cdrom.Iso.from_disc(out.disc, data_track.start_lba + 16)
-        out.disc.sector_seek(data_track.start_lba)  # boot header
-        out.header = Header.from_bytes(out.disc.read(0x90))
-        return out
+        self.cd_rom = None
+        self.gd_rom = cdrom.Iso.from_disc(self.disc, data_track.start_lba + 16)
+        self.disc.sector_seek(data_track.start_lba)  # boot header
+        self.header = Header.from_bytes(self.disc.read(0x90))
 
-    @classmethod
-    def from_disc(cls, disc: base.DiscImage) -> GDRom:
-        out = cls()
-        out.disc = disc
-        # NOTE: cd_rom filesystem may not be present
-        out.cd_rom = cdrom.Iso.from_disc(out.disc, 16)
-        # NOTE: gd_rom filesystem & header might not start at 45000
-        out.gd_rom = cdrom.Iso.from_disc(out.disc, 45016)
-        # NOTE: might also have a header @ lba 0
-        out.disc.sector_seek(45000)  # boot header
-        out.header = Header.from_bytes(out.disc.read(0x90))
-        return out
-
-    @classmethod
-    def from_file(cls, filename: str) -> GDRom:
-        ext = os.path.splitext(filename.lower())[-1]
-        if ext == ".cdi":
-            cdi = padus.Cdi.from_file(filename)
-            return cls.from_cdi(cdi)
-        elif ext in disc_classes:
-            disc = disc_classes[ext].from_file(filename)
-            return cls.from_disc(disc)
+    def parse_disc(self):
+        if 16 in self.disc:
+            self.cd_rom = cdrom.Iso.from_disc(self.disc)
         else:
-            raise RuntimeError(f"Unsupported file extension: {ext}")
+            self.cd_rom = None
+        # NOTE: gd_rom filesystem & header might not start at 45000
+        # -- should be in "Session 02 Track 01"
+        self.gd_rom = cdrom.Iso.from_disc(self.disc)
+        self.gd_rom.pvd_sector = 45016
+        # NOTE: might also have a header @ lba 0
+        self.disc.sector_seek(45000)  # boot header
+        self.header = Header.from_bytes(self.disc.read(0x90))
 
     @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> GDRom:
-        return cls.from_bytes(stream.read())
+    def from_disc(cls, disc: base.DiscImage):
+        out = cls(disc.filename)
+        out.disc = disc
+        return out

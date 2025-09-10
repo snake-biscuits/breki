@@ -3,14 +3,15 @@
 # https://github.com/jozip/cdirip
 from __future__ import annotations
 import io
-from typing import List
 
-from .. import external
-from ..utils import binary
+from .. import binary
+from .. import files
 from . import base
 
 
 def parse_track(stream: io.BytesIO, cdi_version: int, name: str) -> (base.Track, int):
+    """returns Track & pregap_size (length in bytes)"""
+
     def skip(length: int):
         stream.seek(length, 1)
 
@@ -51,61 +52,53 @@ def parse_track(stream: io.BytesIO, cdi_version: int, name: str) -> (base.Track,
     return track, pregap_length * sector_size
 
 
-class Cdi(base.DiscImage):
-    ext = "*.cdi"
+class Cdi(base.DiscImage, files.BinaryFile):
+    exts = ["*.cdi"]
     version: str  # e.g. "2.0"
-    _file: io.BytesIO
 
     def __repr__(self) -> str:
         descriptor = f"v{self.version} {len(self)} sectors ({len(self.track)} tracks)"
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
-    def extra_patterns(self) -> List[str]:
-        return list()
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Cdi:
-        out = cls()
-        out._file = stream
+    def parse(self):
         # version identifier
-        out._file.seek(0, 2)  # "header" is on the tail
-        length = out._file.tell()
+        self.stream.seek(0, 2)  # "header" is on the tail
+        length = self.stream.tell()
         assert length > 8
-        out._file.seek(-8, 2)
-        version, header_offset = binary.read_struct(stream, "2I")
+        self.stream.seek(-8, 2)
+        version, header_offset = binary.read_struct(self.stream, "2I")
         version_code = {
             0x80000004: "2.0",
             0x80000005: "3.0",
             0x80000006: "3.5"}
         assert version in version_code, "unknown .cdi format version"
         assert header_offset != 0, "invalid .cdi file"
-        out.version = version_code[version]
-        if out.version != "3.5":
-            out._file.seek(header_offset)
+        self.version = version_code[version]
+        if self.version != "3.5":
+            self.stream.seek(header_offset)
         else:  # v3.0 header_offset is negative
-            out._file.seek(length - header_offset)
+            self.stream.seek(length - header_offset)
         # the "header"
         needle = 0  # track offsets
         track_offsets = list()
-        num_sessions = binary.read_struct(stream, "H")
+        num_sessions = binary.read_struct(self.stream, "H")
         for session in range(num_sessions):
-            num_tracks = binary.read_struct(stream, "H")
+            num_tracks = binary.read_struct(self.stream, "H")
             # NOTE: some sessions have 0 tracks
             for track in range(num_tracks):
                 name = f"Session {session + 1:02d} Track {track + 1:02d}"
-                track, pregap_length = parse_track(stream, out.version, name)
-                out.tracks.append(track)
+                track, pregap_length = parse_track(self.stream, self.version, name)
+                self.tracks.append(track)
                 track_offsets.append(needle + pregap_length)
                 needle += pregap_length + (track.length * track.sector_size)
             # cdi.c:CDI_skip_next_session
-            out._file.seek(12, 1)  # 4 + 8
-            if out.version != "2.0":
-                out._file.seek(1, 1)
+            self.stream.seek(12, 1)  # 4 + 8
+            if self.version != "2.0":
+                self.stream.seek(1, 1)
         # get track data
-        for track, offset in zip(out.tracks, track_offsets):
-            out._file.seek(offset)
+        for track, offset in zip(self.tracks, track_offsets):
+            self.stream.seek(offset)
             length = track.length * track.sector_size
-            data = out._file.read(length)
+            data = self.stream.read(length)
             assert len(data) == length
-            out.extras[track.name] = external.File.from_bytes(track.name, data)
-        return out
+            self.friends[track.name] = files.File.from_bytes(track.name, data)

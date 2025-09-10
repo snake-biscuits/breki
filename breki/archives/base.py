@@ -179,11 +179,13 @@ class DiscImage(files.ParsedFile):
             descriptor += f" in {archive_repr}"
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def __contains__(self, lba: int) -> bool:
         return any([
             track.start_lba <= lba <= track.start_lba + track.length
             for track in self.tracks])
 
+    @parse_first
     def __len__(self):
         if len(self.tracks) > 0:
             return max(t.start_lba + t.length for t in self.tracks)
@@ -237,7 +239,7 @@ class DiscImage(files.ParsedFile):
                 try:
                     file_size = self.friends[track.name].size
                 except KeyError:
-                    raise FileNotFoundError(f"couldn't find {track.name!r}")
+                    raise FileNotFoundError(f'"{track.name}"')
                 assert file_size % track.sector_size == 0, f"{track=}, {file_size=}"
                 track.length = file_size // track.sector_size
                 self.tracks[track_index] = track

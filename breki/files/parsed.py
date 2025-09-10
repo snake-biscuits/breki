@@ -85,6 +85,7 @@ class ParsedFile(base.File):
 
 
 class FriendlyFile(ParsedFile):
+    # NOTE: .size is the size of the main file only
     friend_patterns: Dict[str, base.DataType]
     friends: Dict[str, base.File]
 
@@ -219,7 +220,7 @@ class HybridFile(ParsedFile):
         """determine type if ambiguous"""
         # get DataType from extension
         for pattern, type_ in cls.exts.items():
-            if fnmatch.fnmatch(cls.filename, pattern):
+            if fnmatch.fnmatch(filepath, pattern):
                 return type_
         else:
             return base.DataType.EITHER
@@ -277,7 +278,7 @@ class HybridFile(ParsedFile):
         """-> .from_stream + immediate parse"""
         type_ = cls.type if type_ is None else type_
         if type_ == base.DataType.EITHER:
-            type_ = cls.identify(io.BytesIO(raw_bytes))
+            type_ = cls.identify(filepath, io.BytesIO(raw_bytes))
         out = super().from_bytes(filepath, raw_bytes, type_, code_page)
         out.parse(type_)
         return out
@@ -292,6 +293,9 @@ class HybridFile(ParsedFile):
     @classmethod
     def from_stream(cls, filepath: str, stream: base.DataStream, type_=None, code_page=None) -> HybridFile:
         """override .stream property + immediate parse"""
+        type_ = cls.type if type_ is None else type_
+        if type_ == base.DataType.EITHER:
+            type_ = cls.identify(filepath, stream)
         out = super().from_stream(filepath, stream, type_, code_page)
         out.parse()
         return out

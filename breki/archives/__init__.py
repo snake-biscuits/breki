@@ -5,7 +5,8 @@
 #     "pi_studios", "pkware", "respawn", "ritual", "runecraft", "sega",
 #     "troika", "utoplanet", "valve"]
 __all__ = [
-    "base", "bluepoint", "cdrom", "gearbox", "golden_hawk", "pkware"]
+    "alcohol", "base", "bluepoint", "cdrom", "gearbox", "golden_hawk",
+    "mame", "padus", "pkware", "sega"]
 
 # import fnmatch
 # import os
@@ -13,7 +14,7 @@ __all__ = [
 
 from . import base
 
-# from . import alcohol  # Mds
+from . import alcohol  # Mds
 from . import bluepoint  # Bpk
 from . import cdrom  # Iso
 from . import gearbox  # Nightfire007
@@ -21,15 +22,15 @@ from . import golden_hawk  # Cue
 # from . import id_software  # Pak & Pk3
 # from . import infinity_ward  # FastFile & Iwd
 # from . import ion_storm  # Dat & Pak
-# from . import mame  # Chd
+from . import mame  # Chd
 # from . import nexon  # Hfs, PakFile & Pkg
-# from . import padus  # Cdi
+from . import padus  # Cdi
 # from . import pi_studios  # Bpk
 from . import pkware  # Zip
 # from . import respawn  # RPak & Vpk
 # from . import ritual  # Sin
 # from . import runecraft  # Pak
-# from . import sega  # Gdi & GDRom
+from . import sega  # Gdi & GDRom
 # from . import troika  # Vpk
 # from . import utoplanet  # Apk
 # from . import valve  # Vpk
