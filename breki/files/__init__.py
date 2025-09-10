@@ -1,8 +1,8 @@
 __all__ = [
     "base", "parsed",
-    "CodePage", "DataType", "File", "FriendlyFile",
+    "CodePage", "DataType", "File",
     "ByteStream", "DataStream", "TextStream",
-    "ParsedFile",
+    "ParsedFile", "FriendlyFile",
     "BinaryFile", "FriendlyBinaryFile",
     "TextFile", "FriendlyTextFile",
     "HybridFile", "FriendlyHybridFile"]
@@ -10,10 +10,10 @@ __all__ = [
 from . import base
 from . import parsed
 
-from .base import CodePage, DataType, File, FriendlyFile
+from .base import CodePage, DataType, File
 from .base import ByteStream, DataStream, TextStream  # type hints
 
-from .parsed import ParsedFile  # base class
+from .parsed import ParsedFile, FriendlyFile  # base classes
 from .parsed import BinaryFile, FriendlyBinaryFile
 from .parsed import TextFile, FriendlyTextFile
 from .parsed import HybridFile, FriendlyHybridFile

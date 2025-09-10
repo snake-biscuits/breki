@@ -1,24 +1,27 @@
 from __future__ import annotations
+import fnmatch
 import functools
 import io
 import os
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from . import base
 
 
 class ParsedFile(base.File):
     exts: List[str] = list()  # class-level definition
-    # NOTE: we don't reject filepaths that don't have the right extension
+    # ^ ["*.ext"]
+    # NOTE: just a hint, not enforced
     is_parsed: bool
 
     def __init__(self, filepath: str, archive=None, code_page=None):
         super().__init__(filepath, archive, code_page)
         self.is_parsed = False
 
-    def __getattr__(self, attr: str):
+    def __getattr__(self, attr: str) -> Any:
         if not self.is_parsed:
             self.parse()
+            self.is_parsed = True
         return getattr(self, attr)
 
     def as_bytes(self) -> bytes:
@@ -44,32 +47,87 @@ class ParsedFile(base.File):
             out_file.write(self.as_bytes())
 
     # intialisers
-    # NOTE: wrapped to force cls.type
+    # NOTE: wrapped to enforce cls.type
     @classmethod
-    def from_archive(cls, filepath: str, archive, code_page=None) -> ParsedFile:
+    def from_archive(cls, archive, filepath: str, type_=None, code_page=None) -> ParsedFile:
         """defers read until .stream is accessed"""
-        return super().from_archive(filepath, archive, cls.type, code_page)
+        assert type_ in (None, cls.type)
+        return super().from_archive(archive, filepath, cls.type, code_page)
 
     @classmethod
-    def from_bytes(cls, filepath: str, raw_bytes: bytes, code_page=None) -> ParsedFile:
+    def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None, code_page=None) -> ParsedFile:
         """-> .from_stream"""
+        assert type_ in (None, cls.type)
         return super().from_bytes(filepath, raw_bytes, cls.type, code_page)
 
     @classmethod
-    def from_file(cls, filepath: str, code_page=None) -> ParsedFile:
+    def from_file(cls, filepath: str, type_=None, code_page=None) -> ParsedFile:
         """defers read until .stream is accessed"""
+        assert type_ in (None, cls.type)
         return super().from_file(filepath, cls.type, code_page)
 
-    @classmethod
-    def from_lines(cls, filepath: str, lines: List[str], code_page=None) -> ParsedFile:
-        """-> .from_stream"""
-        return super().from_lines(filepath, lines, code_page)
+    # @classmethod
+    # def from_lines(cls, filepath: str, lines: List[str], code_page=None) -> ParsedFile:
+    #     """-> .from_stream"""
+    #     return super().from_lines(filepath, lines, code_page)
 
     @classmethod
-    def from_stream(cls, filepath: str, stream: base.DataStream, code_page=None) -> ParsedFile:
+    def from_stream(cls, filepath: str, stream: base.DataStream, type_=None, code_page=None) -> ParsedFile:
         """override .stream property"""
+        assert type_ in (None, cls.type)
         # NOTE: File.from_stream will ensure stream is valid for cls.type
         return super().from_stream(filepath, stream, cls.type, code_page)
+
+
+class FriendlyFile(ParsedFile):
+    friend_patterns: Dict[str, base.DataType]
+    friends: Dict[str, base.File]
+
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
+        self.friends = dict()
+
+    def make_friends(self, candidates: Dict[str, str] = None, archive=None):
+        """post-initialisation friend collection"""
+        # NOTE: friends can be found in all sorts of places
+        archive = self.archive if archive is None else archive
+        if candidates is None:
+            if self.archive is None:
+                neighbours = os.listdir(self.folder)
+            else:
+                neighbours = self.archive.listdir(self.folder)
+            candidates = {
+                filename: os.path.join(self.folder, filename)
+                for filename in neighbours}
+        friends = {
+            filename: (filepath, type_)
+            for filename, filepath in candidates.items()
+            for pattern, type_ in self.friend_patterns.items()
+            if fnmatch.fnmatch(filename, pattern)}
+        for filename, (filepath, type_) in friends.items():
+            if archive is not None:
+                friend = base.File.from_archive(archive, filepath, type_)
+            else:
+                friend = base.File.from_file(filepath, type_)
+            self.friends[filename] = friend
+
+    @functools.cached_property
+    def friend_patterns(self) -> Dict[str, base.DataType]:
+        """glob patterns for files we can befriend"""
+        return dict()
+
+    # intialisers
+    @classmethod
+    def from_archive(cls, archive, filepath: str, type_=None, code_page=None) -> FriendlyFile:
+        out = super().from_archive(archive, filepath, type_, code_page)
+        out.make_friends()
+        return out
+
+    @classmethod
+    def from_file(cls, filepath: str, type_=None, code_page=None) -> FriendlyFile:
+        out = super().from_file(filepath, type_, code_page)
+        out.make_friends()
+        return out
 
 
 class BinaryFile(ParsedFile):
@@ -85,7 +143,7 @@ class BinaryFile(ParsedFile):
         raise RuntimeError("BinaryFile cannot be initialised from_lines")
 
 
-class FriendlyBinaryFile(BinaryFile, base.FriendlyFile):
+class FriendlyBinaryFile(BinaryFile, FriendlyFile):
     pass
 
 
@@ -93,20 +151,22 @@ class TextFile(ParsedFile):
     type = base.DataType.TEXT
 
 
-class FriendlyTextFile(TextFile, base.FriendlyFile):
+class FriendlyTextFile(TextFile, FriendlyFile):
     pass
 
 
 class HybridFile(ParsedFile):
     exts: Dict[str, base.DataType] = dict()
-    # ^ {".bin": Datatype.BINARY}
+    # ^ {"*.bin": Datatype.BINARY}
     type = base.DataType.EITHER
 
     def __repr__(self) -> str:
         descriptor = [f'"{self.filename}"']
-        if self.type == base.DataType.EITHER:  # match .ext
-            ext = f".{self.filename.rpartition('.')[-1]}"
-            self.type = self.exts.get(ext, base.DataType.EITHER)
+        if self.type == base.DataType.EITHER:
+            for pattern, type_ in self.exts.items():
+                if fnmatch.fnmatch(self.filename, pattern):
+                    self.type = type_
+                    break
         descriptor.append(f"[{self.type.name}]")
         if self.archive is not None:
             archive_repr = " ".join([
@@ -129,10 +189,12 @@ class HybridFile(ParsedFile):
     def identify(cls, filepath: str, stream: base.ByteStream) -> base.DataType:
         """determine type if ambiguous"""
         # get DataType from extension
-        ext = f".{filepath.rpartition('.')[-1]}"
-        type_ = cls.exts.get(ext, base.DataType.EITHER)
-        return type_
-        # NOTE: subclasses should test stream if type_ == EITHER
+        for pattern, type_ in cls.exts.items():
+            if fnmatch.fnmatch(cls.filename, pattern):
+                return type_
+        else:
+            return base.DataType.EITHER
+        # NOTE: subclasses should do further testing for patterns w/ type EITHER
         # -- brute force solution: (checks every byte)
         # -- stream.seek(0)
         # -- return DataType.TEXT if stream.read().isascii() else DataType.BINARY
@@ -145,8 +207,10 @@ class HybridFile(ParsedFile):
             self.parse_binary()
         elif type_ == base.DataType.TEXT:
             self.parse_text()
+        elif type_ == base.DataType.EITHER:
+            raise RuntimeError("failed to identify DataType")
         else:
-            raise RuntimeError(f"Invalid type: {type!r}")
+            raise RuntimeError(f"Invalid DataType: {type_!r}")
         self.type = type_
         self.is_parsed = True
 
@@ -173,9 +237,9 @@ class HybridFile(ParsedFile):
 
     # initialisers
     @classmethod
-    def from_archive(cls, filepath: str, archive, type_=None, code_page=None) -> HybridFile:
+    def from_archive(cls, archive, filepath: str, type_=None, code_page=None) -> HybridFile:
         """defers read until .stream is accessed"""
-        return super().from_archive(filepath, archive, type_, code_page)
+        return super().from_archive(archive, filepath, type_, code_page)
 
     @classmethod
     def from_bytes(cls, filepath: str, raw_bytes: bytes, type_=None, code_page=None) -> HybridFile:
@@ -210,5 +274,5 @@ class HybridFile(ParsedFile):
         return out
 
 
-class FriendlyHybridFile(HybridFile, base.FriendlyFile):
+class FriendlyHybridFile(HybridFile, FriendlyFile):
     pass

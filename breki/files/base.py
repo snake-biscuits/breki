@@ -86,11 +86,12 @@ class File:
         """deferring opening the file until it's touched"""
         type_ = self.type if type_ is None else type_
         assert isinstance(type_, DataType)
+        filepath = os.path.join(self.folder, self.filename)
         if self.archive is None:
             mode = "rb" if type_ != DataType.TEXT else "r"
-            out = open(self.filename, mode)
+            out = open(filepath, mode)
         else:
-            raw_bytes = self.archive.read(self.filename)
+            raw_bytes = self.archive.read(filepath)
             if type_ == DataType.TEXT:
                 raw_text = self.code_page.decode(raw_bytes)
                 out = io.StringIO(raw_text)
@@ -104,7 +105,7 @@ class File:
     # initialisers
     # NOTE: all initialisers must provide a filepath
     @classmethod
-    def from_archive(cls, filepath: str, archive, type_=None, code_page=None) -> File:
+    def from_archive(cls, archive, filepath: str, type_=None, code_page=None) -> File:
         """defers read until .stream is accessed"""
         type_ = cls.type if type_ is None else type_
         assert isinstance(type_, DataType)
@@ -176,56 +177,4 @@ class File:
         else:
             raise RuntimeError("Invalid type_: {type_!r}")
         out.code_page = cls.code_page if code_page is None else code_page
-        return out
-
-
-class FriendlyFile(File):
-    friend_patterns: Dict[str, DataType]
-    friends: Dict[str, File]
-
-    def __init__(self, filepath: str, archive=None):
-        super().__init__(filepath, archive)
-        self.friends = dict()
-
-    def make_friends(self, candidates: Dict[str, str], archive=None):
-        """post-initialisation friend collection"""
-        archive = self.archive if archive is None else archive
-        # NOTE: friends can come from other archives
-        friends = {
-            filename: (filepath, type_)
-            for filename, filepath in candidates.items()
-            for pattern, type_ in self.friend_patterns.items()
-            if fnmatch.fnmatch(filename, pattern)}
-        for filename, (filepath, type_) in friends.items():
-            if archive is not None:
-                friend = File.from_archive(filepath, archive, type_)
-            else:
-                friend = File.from_file(filepath, type_)
-            self.friends[filename] = friend
-
-    @functools.cached_property
-    def friend_patterns(self) -> Dict[str, DataType]:
-        """glob patterns for files we can befriend"""
-        # NOTE: you can derive patterns from self.filename w/ a cached_property
-        raise NotImplementedError()
-
-    # intialisers
-    # NOTE: by default, friends must be in the same folder as the main file
-    # -- and in the same archive as the main file, if applicable
-    @classmethod
-    def from_archive(cls, filepath: str, archive, type_=None) -> File:
-        out = super().from_archive(filepath, archive, type_)
-        candidates = {
-            filename: os.path.join(out.folder, filename)
-            for filename in archive.listdir(out.folder)}
-        out.make_friends(candidates, archive)
-        return out
-
-    @classmethod
-    def from_file(cls, filepath: str, type_=None) -> File:
-        out = super().from_file(filepath, type_)
-        candidates = {
-            filename: os.path.join(out.folder, filename)
-            for filename in os.listdir(out.folder)}
-        out.make_friends(candidates)
         return out
