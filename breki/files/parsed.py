@@ -1,6 +1,7 @@
 from __future__ import annotations
 import functools
 import io
+import os
 from typing import Dict, List
 
 from . import base
@@ -32,6 +33,15 @@ class ParsedFile(base.File):
         """deferred post-init stage"""
         raise NotImplementedError()
         self.is_parsed = True
+
+    def save(self):
+        """save changes, overwriting original file"""
+        self.save_as(os.path.join(self.folder, self.filename))
+
+    def save_as(self, filepath: str):
+        """save changes to file"""
+        with open(filepath, "wb") as out_file:
+            out_file.write(self.as_bytes())
 
     # intialisers
     # NOTE: wrapped to force cls.type
