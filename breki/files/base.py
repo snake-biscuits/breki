@@ -45,7 +45,10 @@ class File:
         if self.type != DataType.EITHER:
             descriptor.append(f"[{self.type.name}]")
         if self.archive is not None:
-            descriptor.append(f"in {self.archive!r}")
+            archive_repr = " ".join([
+                self.archive.__class__.__name__,
+                f'"{self.archive.filename}"'])
+            descriptor.append(f"in {archive_repr}")
         descriptor = " ".join(descriptor)
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
