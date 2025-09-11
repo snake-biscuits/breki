@@ -56,3 +56,19 @@
 ## Usage
 
 > TODO
+
+
+## Common Mistakes
+
+### Archive / Filepath order
+
+`File.__init__` argument order is `filepath`, `archive`.
+`File.from_archive` argument order is `archive, filepath`.
+
+For `.__init__`: the archive is optional, so it can't come before `filepath`.
+For `.from_archive`: the archive is essential & it comes first in the path string.
+
+> e.g. `archives/archive.zip/file.ext` -> `.from_archive(Zip("archive/archive.zip"), "file.ext")`
+
+It's also worth noting that `__init__` args are a valid way to open a file.
+Since the data isn't read until `File.stream` is first cached.
