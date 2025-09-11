@@ -91,7 +91,8 @@ librarians = {
     # Linux Desktop
     ("bikkie", "megalodon"): GameLibrary(
         Steam="/home/bikkie/.steam/steam/steamapps/common/",
-        Mod="/home/bikkie/drives/ssd1/Mod/")}
+        Mod="/home/bikkie/drives/ssd1/Mod/",
+        Dreamcast="/home/bikkie/drives/ssd1/Emulators/Sega/Dreamcast/")}
 
 librarian_aliases = {
     "Jared@ITANI_WAYSOUND": "bikkie"}

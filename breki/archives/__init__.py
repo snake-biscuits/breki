@@ -6,11 +6,12 @@
 #     "troika", "utoplanet", "valve"]
 __all__ = [
     "alcohol", "base", "bluepoint", "cdrom", "gearbox", "golden_hawk",
-    "mame", "padus", "pkware", "sega"]
+    "mame", "padus", "pkware", "sega",
+    "search_folder", "extract_folder"]
 
-# import fnmatch
-# import os
-# from typing import Dict, List
+import fnmatch
+import os
+from typing import Dict, List
 
 from . import base
 
@@ -62,22 +63,31 @@ from . import sega  # Gdi & GDRom
 # # NOTE: nexon.PakFile only exists as the PAKFILE lump of NexonBsp
 
 
-# # batch operations
-# # TODO: ignore r".*_[0-9]+\.vpk" when looking for respawn.Vpk
-# # -- this also applies for some valve.Vpk
-# def search_folder(archive_class: base.Archive, path: str, pattern: str = "*.bsp") -> Dict[str, List[str]]:
-#     """check all archives in this folder for files matching pattern"""
-#     findings = dict()
-#     for archive_filename in fnmatch.filter(os.listdir(path), archive_class.ext):
-#         archive = archive_class(os.path.join(path, archive_filename))
-#         matching_files = [f for f in archive.search(pattern)]
-#         if len(matching_files) != 0:
-#             findings[archive_filename] = matching_files
-#     return findings
+# batch operations
+Findings = Dict[str, List[str]]
+# ^ {"./archive.ext": ["./filepath.ext"]}
 
 
-# def extract_folder(archive_class: base.Archive, path: str, pattern: str = "*.bsp", to_path: str = None):
-#     """extract all files in archives in this folder which match pattern"""
-#     for archive_filename in fnmatch.filter(os.listdir(path), archive_class.ext):
-#         archive = archive_class(os.path.join(path, archive_filename))
-#         archive.extract_match(pattern=pattern, to_path=to_path)
+# NOTE: will have issues with folders containing a mix of "*.vpk" & `*_dir.vpk`
+# TODO: think about moving these functions to `libraries`
+def search_folder(archive_class: base.Archive, folder: str, pattern: str) -> Findings:
+    """check all archives in this folder for files matching pattern"""
+    findings = dict()
+    for filename in os.listdir(folder):
+        matches = any(
+            fnmatch.fnmatch(filename, pattern)
+            for pattern in archive_class.exts)
+        if not matches:
+            continue
+        archive = archive_class(os.path.join(folder, filename))
+        matching_files = archive.search(pattern)
+        if len(matching_files) != 0:
+            findings[filename] = matching_files
+    return findings
+
+
+def extract_folder(archive_class: base.Archive, path: str, pattern: str, to_path: str = None):
+    """extract all files in archives in this folder which match pattern"""
+    for archive_filename in fnmatch.filter(os.listdir(path), archive_class.ext):
+        archive = archive_class(os.path.join(path, archive_filename))
+        archive.extract_match(pattern=pattern, to_path=to_path)

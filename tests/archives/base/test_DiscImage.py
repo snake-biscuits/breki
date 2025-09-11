@@ -1,26 +1,27 @@
 from __future__ import annotations
 
-from bsp_tool.archives.base import DiscImage, Track, TrackMode
-from bsp_tool.external import File
+from breki.archives.base import DiscImage, Track, TrackMode
+from breki.files import File
 
 
 class RawDiscImage(DiscImage):
     @classmethod
-    def from_bytes(cls, raw_data: bytes) -> RawDiscImage:
+    def from_bytes(cls, filepath: str, raw_bytes: bytes) -> RawDiscImage:
         """for tests & .iso"""
-        out = cls()
-        tail_length = len(raw_data) % 2048
+        out = cls(filepath)
+        tail_length = len(raw_bytes) % 2048
         if tail_length != 0:
-            raw_data = b"".join([raw_data, b"\x00" * (2048 - tail_length)])
-        length = len(raw_data) // 2048
-        out.extras = {":memory:": File.from_bytes(":memory:", raw_data)}
-        out.tracks = [Track(TrackMode.BINARY_2, 2048, 0, length, ":memory:")]
+            raw_bytes = b"".join([raw_bytes, b"\x00" * (2048 - tail_length)])
+        length = len(raw_bytes) // 2048
+        out.friends = {filepath: File.from_bytes(filepath, raw_bytes)}
+        out.tracks = [Track(TrackMode.BINARY_2, 2048, 0, length, filepath)]
+        out.is_parsed = True  # avoid NotImplementedError
         return out
 
 
 def test_basic():
     in_bytes = b"\x00" * 2048
-    di = RawDiscImage.from_bytes(in_bytes)
+    di = RawDiscImage.from_bytes(":memory:", in_bytes)
     # test dummy track assembly
     assert isinstance(di.tracks, list)
     assert len(di.tracks) == 1

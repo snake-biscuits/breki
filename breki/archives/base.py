@@ -98,9 +98,9 @@ class Archive(files.ParsedFile):
     def search(self, pattern: str, case_sensitive: bool = False) -> List[str]:
         if case_sensitive:
             return [
-                path
-                for path in self.namelist()
-                if fnmatch.fnmatchcase(path, pattern)]
+                filepath
+                for filepath in self.namelist()
+                if fnmatch.fnmatchcase(filepath, pattern)]
         else:
             return fnmatch.filter(self.namelist(), pattern)
 
