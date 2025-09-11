@@ -144,6 +144,9 @@ class Track:
             for a in ("mode", "sector_size", "start_lba", "length")])
         return f'Track({args}, "{self.name}")'
 
+    def __contains__(self, lba: int) -> bool:
+        return self.start_lba <= lba < self.start_lba + self.length
+
     def data_slice(self) -> slice:
         """index raw sector with this slice to get just the data"""
         if self.mode == TrackMode.AUDIO or self.sector_size == 2048:
@@ -155,9 +158,10 @@ class Track:
         return slice(header_size, 2048 + header_size)
 
 
-class DiscImage(files.ParsedFile):
+class DiscImage(files.FriendlyFile):
     archive: Archive
-    # new
+    # NOTE: track data is stored in friends
+    # unique to DiscImage
     tracks: List[Track]
     _cursor: Tuple[int, int]
     # ^ (track_index, sub_lba)
@@ -181,9 +185,7 @@ class DiscImage(files.ParsedFile):
 
     @parse_first
     def __contains__(self, lba: int) -> bool:
-        return any([
-            track.start_lba <= lba <= track.start_lba + track.length
-            for track in self.tracks])
+        return any(lba in track for track in self.tracks)
 
     @parse_first
     def __len__(self):
@@ -191,6 +193,19 @@ class DiscImage(files.ParsedFile):
             return max(t.start_lba + t.length for t in self.tracks)
         else:
             return 0
+
+    @parse_first
+    def sector_track(self, lba: int) -> Track:
+        hits = [
+            track
+            for track in self.tracks
+            if lba in track]
+        if len(hits) == 0:
+            return None
+        else:  # assuming 2x hits is the edge between 2 tracks
+            # print(f"sector #{lba} is in the following tracks:")
+            # {print(hit) for hit in hits}
+            return hits[0]
 
     @parse_first
     def export_wav(self, track_index: int, filename: str = None):

@@ -162,6 +162,8 @@ class GDRom(base.Archive, files.HybridFile):
                 self.disc = disc_class.from_stream(self.filepath, self.stream)
             else:
                 self.disc = disc_class.from_archive(self.archive, self.filepath)
+        if not self.disc.is_parsed:
+            self.disc.parse()
         if isinstance(self.disc, padus.Cdi):
             self.parse_cdi()
         else:
@@ -169,15 +171,19 @@ class GDRom(base.Archive, files.HybridFile):
         self.type = self.disc.type
 
     def parse_cdi(self):
+        # if 16 in self.disc:
+        #     self.cd_rom = cdrom.Iso.from_disc(self.disc)
+        # else:
+        #     self.cd_rom = None
         # DEBUG: the 1 .cdi I'm testing doesn't start the GD-ROM area @ 45000
-        assert "Session 02 Track 01" in self.disc.extras
+        assert "Session 02 Track 01" in self.disc.friends
         # NOTE: should be 2 sessions (cd_rom & gd_rom)
         data_track = {track.name: track for track in self.disc.tracks}["Session 02 Track 01"]
         assert data_track.mode != base.TrackMode.AUDIO
         # build the GD-ROM
         # TODO: check for a binary track at the start of the cd_rom sectors
-        self.cd_rom = None
-        self.gd_rom = cdrom.Iso.from_disc(self.disc, data_track.start_lba + 16)
+        self.gd_rom = cdrom.Iso.from_disc(self.disc)
+        self.gd_rom.pvd_sector = data_track.start_lba + 16
         self.disc.sector_seek(data_track.start_lba)  # boot header
         self.header = Header.from_bytes(self.disc.read(0x90))
 
@@ -193,6 +199,10 @@ class GDRom(base.Archive, files.HybridFile):
         # NOTE: might also have a header @ lba 0
         self.disc.sector_seek(45000)  # boot header
         self.header = Header.from_bytes(self.disc.read(0x90))
+
+    # TODO: override .save_as to detect disc_class
+    # -- could use this to convert .cue to .gdi
+    # -- tho you can do that without loading the tracks
 
     @classmethod
     def from_disc(cls, disc: base.DiscImage):

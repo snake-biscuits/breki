@@ -57,10 +57,14 @@ class Cdi(base.DiscImage, files.BinaryFile):
     version: str  # e.g. "2.0"
 
     def __repr__(self) -> str:
-        descriptor = f"v{self.version} {len(self)} sectors ({len(self.track)} tracks)"
+        descriptor = " ".join([
+            f"v{self.version}",
+            f"{len(self)} sectors",
+            f"({len(self.tracks)} tracks)"])
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
     def parse(self):
+        self.is_parsed = True
         # version identifier
         self.stream.seek(0, 2)  # "header" is on the tail
         length = self.stream.tell()

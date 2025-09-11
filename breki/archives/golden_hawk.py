@@ -18,8 +18,9 @@ class Cue(base.DiscImage, files.FriendlyTextFile):
     exts = ["*.cue"]
 
     def parse(self):
+        self.is_parsed = True
+        # NOTE: we assume all metadata we need is declared before "TRACK"
         state = dict()
-        # NOTE: we assume all metadata we need is declated before "TRACK"
         keywords = ("FILE", "REM", "TRACK")
         lba = None
         for line in self.stream:
@@ -44,6 +45,7 @@ class Cue(base.DiscImage, files.FriendlyTextFile):
         prev_lba, prev_length = 0, 0
         for track_index, track in enumerate(self.tracks):
             lba = track.start_lba
+            # skip first "HIGH-DENSITY AREA" track
             if not (track.start_lba == 45000 and prev_lba == 0):
                 track.start_lba += prev_length
             self.tracks[track_index] = track

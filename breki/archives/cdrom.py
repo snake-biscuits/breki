@@ -434,8 +434,6 @@ class Iso(base.Archive):
 
     @parse_first
     def sector_seek(self, lba: int) -> int:
-        if not self.disc.is_parsed:
-            self.disc.parse()
         return self.disc.sector_seek(lba + self.lba_offset)
 
     def parse(self):
@@ -447,6 +445,8 @@ class Iso(base.Archive):
             self.disc.tracks = [
                 base.Track(base.TrackMode.BINARY_1, 2048, 0, length, self.filename)]
             self.disc.friends = {self.filename: self}
+            self.disc.is_parsed = True
+        if not self.disc.is_parsed:
             self.disc.parse()
         self.disc.sector_seek(self.pvd_sector)
         # pvd
