@@ -1,31 +1,34 @@
 import pytest
 
-from bsp_tool.archives import base
-from bsp_tool.archives import alcohol
-from bsp_tool.archives import golden_hawk
-from bsp_tool.archives import padus
-from bsp_tool.archives import sega
+from breki.archives.base import DiscImage
 
 
-disc_classes = [
-    alcohol.Mds,
-    golden_hawk.Cue,
-    padus.Cdi,
-    sega.Gdi]
+def all_subclasses_of(cls):
+    for sc in cls.__subclasses__():
+        yield sc
+        for ssc in all_subclasses_of(sc):
+            yield ssc
 
 
-def class_name(cls: object) -> str:
-    short_module = cls.__module__.split(".")[-1]
-    return ".".join([short_module, cls.__name__])
+disc_classes = {
+    f"{cls.__module__.rpartition('.')[-1]}.{cls.__name__}": cls
+    for cls in all_subclasses_of(DiscImage)}
+# should be:
+# -- alcohol.Mds
+# -- golden_hawk.Cue
+# -- mame.Chd
+# -- padus.Cdi
+# -- sega.Gdi
 
 
-@pytest.mark.parametrize("disc_class", disc_classes, ids=map(class_name, disc_classes))
+@pytest.mark.parametrize(
+    "disc_class", disc_classes.values(), ids=disc_classes.keys())
 def test_in_spec(disc_class: object):
-    assert issubclass(disc_class, base.DiscImage), "not a base.DiscImage subclass"
-    assert hasattr(disc_class, "ext"), "ext not specified"
-    assert isinstance(disc_class.ext, str), "ext must be of type str"
-    assert disc_class.ext.startswith("*."), "ext must start with wildcard"
-    assert hasattr(disc_class, "read"), "no read method"
-    # TODO: test other fundamentals
-    # -- extra_patterns, mount_file & unmount_file
-    # -- __init__ prepares tracks, extras & _cursor
+    assert issubclass(disc_class, DiscImage), "not a base.DiscImage subclass"
+    assert hasattr(disc_class, "exts"), "ext not specified"
+    assert isinstance(disc_class.exts, list), "ext must be of type str"
+    for ext in disc_class.exts:
+        assert isinstance(ext, str), "ext must be of type str"
+        assert ext.startswith("*."), "ext must start with wildcard"
+    # TODO: parse, read & namelist implemented
+    # TODO: parse sets .is_parsed
