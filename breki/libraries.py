@@ -4,8 +4,6 @@ import socket  # gethostname
 from types import ModuleType
 from typing import Dict, Generator, List, Tuple
 
-# from bsp_tool.base import Bsp
-
 
 # "Types"
 LocalBranches = Dict[ModuleType, List[str]]
@@ -111,41 +109,7 @@ def game_library() -> GameLibrary:
     return librarians.get(library_card(), GameLibrary())
 
 
-# Gathering Files
-# def local_bsps(BspClass: Bsp, branch_dirs: LocalBranches, pattern: str = "*.bsp") -> PrettyFiles:
-#     out = dict()
-#     local_maps_dir = os.path.join(os.path.dirname(__file__), "maps/")
-#     for branch in branch_dirs:
-#         for map_dir in branch_dirs[branch]:
-#             full_map_dir = os.path.join(local_maps_dir, map_dir)
-#             for map_name in fnmatch.filter(os.listdir(full_map_dir), pattern):
-#                 pretty_name = f"Local | {map_dir} | {map_name}"
-#                 assert pretty_name not in out, f"pretty name is not unique: {pretty_name!r}"
-#                 bsp = BspClass.from_file(branch, os.path.join(full_map_dir, map_name))
-#                 out[pretty_name] = bsp
-#     return out
-
-
-# TODO: local_archives(ArchiveClass, ...):
-# -- pattern = ArchiveClass.ext
-
-# TODO: local_archive_bsps(ArchiveClass, BspClass, ...):
-
-
-# def library_bsps(BspClass: Bsp, branch_dirs: LibraryBranches, pattern: str = "*.bsp") -> PrettyFiles:
-#     out = dict()
-#     library = game_library()
-#     for branch, search_area in branch_dirs.items():
-#         for section, game, map_paths in library.scan(search_area, pattern):
-#             for short_path, full_path in map_paths:
-#                 pretty_name = f"{section} | {game} | {short_path}"
-#                 assert pretty_name not in out, f"pretty name is not unique: {pretty_name!r}"
-#                 bsp = BspClass.from_file(branch, full_path)
-#                 out[pretty_name] = bsp
-#     return out
-
-
-# TODO: library_archives(ArchiveClass, ...):
-
-# TODO: library_archive_bsps(ArchiveClass, BspClass, ...):
-# -- need to be recursive for GDROM -> Zip -> Bsp
+# TODO: collecting multiple Files inside Library
+# -- choose init & params
+# -- hints
+# -- nested archive path search (NAPS)
