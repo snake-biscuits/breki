@@ -6,7 +6,7 @@
 #     "troika", "utoplanet", "valve"]
 __all__ = [
     "alcohol", "base", "bluepoint", "cdrom", "gearbox", "golden_hawk",
-    "mame", "padus", "pkware", "sega",
+    "mame", "padus", "pkware", "sega", "valve",
     "search_folder", "extract_folder"]
 
 import fnmatch
@@ -34,7 +34,7 @@ from . import pkware  # Zip
 from . import sega  # Gdi & GDRom
 # from . import troika  # Vpk
 # from . import utoplanet  # Apk
-# from . import valve  # Vpk
+from . import valve  # Vpk
 
 
 # with_extension = {

@@ -11,6 +11,25 @@
      `archive_classes = {"*.ext": ArchiveClass}`
      `bsp_tool.autodetect.naps`
 
+
+## Tests
+### Currently Broken
+ - [ ] `tests/archives/`
+   - [ ] `test_ArchiveClass.py`
+   - [ ] `id_software/test_Pak.py`
+   - [ ] `id_software/test_Pk3.py`
+   - [ ] `infinity_ward/test_Iwd.py`
+   - [ ] `ion_storm/test_Dat.py`
+   - [ ] `ion_storm/test_Pak.py`
+   - [ ] `nexon/test_PakFile.py`
+   - [ ] `pi_studios/test_Bpk.py`
+   - [ ] `respawn/test_RPak.py`
+   - [ ] `respawn/test_Vpk.py`
+   - [ ] `ritual/test_Sin.py`
+   - [ ] `utoplanet/test_Apk.py`
+   - [x] `valve/test_Vpk.py`
+
+
 ## Planned Features
  * path utils
    - split folder & filename

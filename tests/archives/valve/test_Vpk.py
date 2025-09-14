@@ -1,11 +1,10 @@
 import pytest
 
-from bsp_tool.archives import valve
+from breki import libraries
+from breki.archives import valve
 
-from ... import files
 
-
-vpk_dirs: files.LibraryGames
+vpk_dirs: libraries.LibraryGames
 vpk_dirs = {
     "Steam": {
         "Black Mesa": ["Black Mesa/bms/"],
@@ -15,6 +14,7 @@ vpk_dirs = {
             "Dark Messiah Might and Magic Single Player/vpks/",
             "Dark Messiah Might and Magic Multi-Player/vpks/"],
         "SiN Episodes: Emergence": ["SiN Episodes Emergence/vpks/"],
+        "Team Fortress 2": ["Team Fortress 2/tf/"],
         "The Ship": ["The Ship/vpks/"],
         "The Ship Singleplayer": ["The Ship Single Player/vpks/"],
         "The Ship Tutorial": ["The Ship Tutorial/vpks/"]}}
@@ -26,7 +26,7 @@ vpk_dirs = {
 # -- by downloading it once for each folder...
 
 
-library = files.game_library()
+library = libraries.game_library()
 vpks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(vpk_dirs, "*_dir.vpk")
