@@ -41,10 +41,10 @@
 > a standard file w/ lumps baseclass
 > base.Bsp is kinda specific, especially in name
 
- * classes (both `bff.File` subclasses)
+ * classes (both `File` subclasses)
    - `LumpFile`
       * is a lump
-      * indexed by a `bff.FriendlyFile`
+      * indexed by a `LumpyFile`
    - `LumpyFile`
       * has lumps
  * examples
