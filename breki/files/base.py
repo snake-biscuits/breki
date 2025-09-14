@@ -31,6 +31,9 @@ class CodePage:
     def __hash__(self):
         return hash((self.encoding, self.errors))
 
+    def __iter__(self):
+        return iter((self.encoding, self.errors))
+
     def decode(self, raw_bytes: bytes) -> str:
         return raw_bytes.decode(self.encoding, self.errors)
 

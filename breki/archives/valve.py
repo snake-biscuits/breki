@@ -59,9 +59,10 @@ class Vpk(base.Archive, files.FriendlyBinaryFile):
     versions = {
         (1, 0): VpkHeader,
         (2, 0): VpkHeaderv2}
+    code_page = files.CodePage("latin_1", "strict")
 
-    def __init__(self, filepath: str, archive=None):
-        super().__init__(filepath, archive)  # archive, folder, filename
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.entries = dict()
         self.extras = dict()
         self.preload_offset = dict()
@@ -124,15 +125,15 @@ class Vpk(base.Archive, files.FriendlyBinaryFile):
         # tree
         assert self.header.tree_length != 0, "no files?"
         while True:
-            extension = binary.read_str(self.stream, encoding="latin_1")
+            extension = binary.read_str(self.stream, *self.code_page)
             if extension == "":
                 break  # end of tree
             while True:
-                folder = binary.read_str(self.stream, encoding="latin_1")
+                folder = binary.read_str(self.stream, *self.code_page)
                 if folder == "":
                     break  # end of extension
                 while True:
-                    filename = binary.read_str(self.stream, encoding="latin_1")
+                    filename = binary.read_str(self.stream, *self.code_page)
                     if filename == "":
                         break  # end of folder
                     # entry
