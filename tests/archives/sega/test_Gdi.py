@@ -17,7 +17,7 @@ gdi_dirs = {
         "Disc Images": [""]}}  # not looking in subdirs
 
 
-library = libraries.game_library()
+library = libraries.GameLibrary.from_config()
 gdis = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(gdi_dirs, "*.gdi")

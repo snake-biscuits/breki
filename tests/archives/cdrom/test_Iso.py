@@ -20,7 +20,7 @@ disc_dirs = {
     "Dreamcast": {
         "Disc Images": [""]}}  # not looking in subdirs
 
-library = libraries.game_library()
+library = libraries.GameLibrary.from_config()
 
 disc_classes = [
     # ("Cdi", "*.cdi", padus.Cdi),

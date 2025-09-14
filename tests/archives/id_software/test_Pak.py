@@ -36,7 +36,7 @@ pak_dirs = {
         "Soldier of Fortune": ["Soldier of Fortune/base"]}}
 
 
-library = libraries.game_library()
+library = libraries.GameLibrary.from_config()
 paks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(pak_dirs, "*.pak")

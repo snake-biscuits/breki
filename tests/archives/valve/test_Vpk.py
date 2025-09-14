@@ -26,7 +26,7 @@ vpk_dirs = {
 # -- by downloading it once for each folder...
 
 
-library = libraries.game_library()
+library = libraries.GameLibrary.from_config()
 vpks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(vpk_dirs, "*_dir.vpk")

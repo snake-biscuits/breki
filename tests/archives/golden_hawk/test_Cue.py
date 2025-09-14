@@ -17,7 +17,7 @@ cue_dirs = {
         "Disc Images": [""]}}  # not looking in subdirs
 
 
-library = libraries.game_library()
+library = libraries.GameLibrary.from_config()
 cues = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(cue_dirs, "*.cue")

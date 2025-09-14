@@ -1,6 +1,7 @@
+from __future__ import annotations
 import fnmatch
+import json
 import os
-import socket  # gethostname
 from types import ModuleType
 from typing import Dict, Generator, List, Tuple
 
@@ -73,40 +74,14 @@ class GameLibrary:
                         for filename in filenames]
                     yield section, game, file_paths
 
-
-librarians = {
-    # Windows Desktop
-    ("bikkie", "ITANI_WAYSOUND"): GameLibrary(
-        Steam="D:/SteamLibrary/steamapps/common/",
-        GoG="D:/GoG Galaxy/Games/",
-        Mod="E:/Mod/",
-        Dreamcast="D:/Emulators/Sega/Dreamcast/",
-        PS4="E:/Mod/PS4/",
-        Xbox360="E:/Mod/X360/"),
-    # Linux Laptop
-    ("bikkie", "coplandbentokom-9876"): GameLibrary(
-        Mod="/media/bikkie/3964-39352/Mod/"),
-    # Linux Desktop
-    ("bikkie", "megalodon"): GameLibrary(
-        Steam="/home/bikkie/.steam/steam/steamapps/common/",
-        Mod="/home/bikkie/drives/ssd1/Mod/",
-        Dreamcast="/home/bikkie/drives/ssd1/Emulators/Sega/Dreamcast/")}
-
-librarian_aliases = {
-    "Jared@ITANI_WAYSOUND": "bikkie"}
-
-
-def library_card() -> (str, str):
-    user = os.getenv("USERNAME", os.getenv("USER"))
-    host = os.getenv("HOSTNAME", os.getenv("COMPUTERNAME", socket.gethostname()))
-    user = librarian_aliases.get(f"{user}@{host}", user)
-    return (user, host)
-
-
-def game_library() -> GameLibrary:
-    """returns the GameLibrary for the current library_card"""
-    # TODO: allow pytest flags to set/override GameLibrary paths
-    return librarians.get(library_card(), GameLibrary())
+    @classmethod
+    def from_config(cls) -> GameLibrary:
+        filepath = os.path.expanduser("~/.config/breki/libraries.json")
+        if os.path.exists(filepath):
+            with open(filepath) as json_file:
+                return cls(**json.load(json_file))
+        else:
+            return cls()
 
 
 # TODO: collecting multiple Files inside Library
