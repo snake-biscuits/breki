@@ -16,7 +16,7 @@
 ### Currently Broken
  - [ ] `tests/archives/`
    - [ ] `test_ArchiveClass.py`
-   - [ ] `id_software/test_Pak.py`
+   - [x] `id_software/test_Pak.py`
    - [ ] `id_software/test_Pk3.py`
    - [ ] `infinity_ward/test_Iwd.py`
    - [ ] `ion_storm/test_Dat.py`
