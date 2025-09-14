@@ -3,7 +3,9 @@ import io
 from typing import Dict, List
 
 from .. import core
-from ..utils import binary
+from .. import binary
+from .. import files
+from ..files.parsed import parse_first
 from . import base
 from . import pkware
 
@@ -16,45 +18,45 @@ class PakFileEntry(core.Struct):
     _format = "56s2I"
 
 
-class Pak(base.Archive):
+class Pak(base.Archive, files.BinaryFile):
     # https://quakewiki.org/wiki/.pak
-    ext = "*.pak"
-    _file: io.BytesIO
+    exts = ["*.pak"]
     entries: Dict[str, PakFileEntry]
+    code_page = files.CodePage("ascii", "strict")
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.entries = dict()
 
+    @parse_first
     def __repr__(self) -> str:
-        descriptor = f"{len(self.entries)} files"
+        descriptor = f'"{self.filename}" {len(self.entries)} files'
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def read(self, filepath: str) -> bytes:
         assert filepath in self.entries
         entry = self.entries[filepath]
-        self._file.seek(entry.offset)
-        return self._file.read(entry.length)
+        self.stream.seek(entry.offset)
+        return self.stream.read(entry.length)
 
+    @parse_first
     def namelist(self) -> List[str]:
         return sorted(self.entries.keys())
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Pak:
-        out = cls()
-        out._file = stream
-        assert out._file.read(4) == b"PACK", "not a .pak file"
+    def parse(self):
+        assert self.stream.read(4) == b"PACK", "not a .pak file"
         # file table
-        offset, length = binary.read_struct(out._file, "2I")
+        offset, length = binary.read_struct(self.stream, "2I")
         sizeof_entry = 64
         assert length % sizeof_entry == 0, "unexpected file table size"
-        out._file.seek(offset)
-        out.entries = {
-            entry.filename.partition(b"\0")[0].decode("ascii"): entry
+        self.stream.seek(offset)
+        self.entries = {
+            self.code_page.decode(entry.filename.partition(b"\0")[0]): entry
             for entry in [
-                PakFileEntry.from_stream(out._file)
+                PakFileEntry.from_stream(self.stream)
                 for i in range(length // sizeof_entry)]}
-        return out
 
 
 class Pk3(pkware.Zip):
-    ext = "*.pk3"
+    exts = ["*.pk3"]

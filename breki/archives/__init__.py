@@ -6,7 +6,7 @@
 #     "troika", "utoplanet", "valve"]
 __all__ = [
     "alcohol", "base", "bluepoint", "cdrom", "gearbox", "golden_hawk",
-    "mame", "padus", "pkware", "sega", "valve",
+    "id_software", "mame", "padus", "pkware", "sega", "valve",
     "search_folder", "extract_folder"]
 
 import fnmatch
@@ -20,7 +20,7 @@ from . import bluepoint  # Bpk
 from . import cdrom  # Iso
 from . import gearbox  # Nightfire007
 from . import golden_hawk  # Cue
-# from . import id_software  # Pak & Pk3
+from . import id_software  # Pak & Pk3
 # from . import infinity_ward  # FastFile & Iwd
 # from . import ion_storm  # Dat & Pak
 from . import mame  # Chd

@@ -1,13 +1,12 @@
 import pytest
 
-from bsp_tool.archives import id_software
-
-from ... import files
+from breki import libraries
+from breki.archives import id_software
 
 
 # TODO: Heretic II
 # TODO: Quake64 in %USERPROFILE%
-pak_dirs: files.LibraryGames
+pak_dirs: libraries.LibraryGames
 pak_dirs = {
     "Steam": {
         "Hexen 2": ["Hexen 2/data1"],
@@ -37,16 +36,16 @@ pak_dirs = {
         "Soldier of Fortune": ["Soldier of Fortune/base"]}}
 
 
-library = files.game_library()
+library = libraries.game_library()
 paks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(pak_dirs, "*.pak")
     for short_path, full_path in paths}
 
 
-@pytest.mark.parametrize("filename", paks.values(), ids=paks.keys())
-def test_from_file(filename: str):
-    pak = id_software.Pak.from_file(filename)
+@pytest.mark.parametrize("filepath", paks.values(), ids=paks.keys())
+def test_from_file(filepath: str):
+    pak = id_software.Pak.from_file(filepath)
     namelist = pak.namelist()
     assert isinstance(namelist, list), ".namelist() failed"
     if len(namelist) != 0:
