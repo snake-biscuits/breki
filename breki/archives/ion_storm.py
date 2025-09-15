@@ -104,7 +104,7 @@ class Pak(id_software.Pak):
         out = b""
         self.stream.seek(entry.offset)
         while self.stream.tell() < entry.offset + entry.compressed_length:
-            x = int.from_bytes(self._file.read(1))
+            x = int.from_bytes(self.stream.read(1))
             if x < 64:
                 out += self.stream.read(x + 1)
             elif x < 128:

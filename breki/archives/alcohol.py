@@ -66,9 +66,8 @@ class MdsTrack(core.Struct):
 
 class Mds(base.DiscImage, files.BinaryFile):
     """Media Descriptor Sidecar"""
-    ext = "*.mds"
+    exts = ["*.mds"]
     # NOTE: needs linked .mdf (Media Descriptor File) data files
-    _file: io.BytesIO  # DEBUG
     header: MdsHeader
     session_header: MdsSessionHeader  # 1x, not per-session?
     tracks: List[MdsTrack]

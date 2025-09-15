@@ -14,14 +14,6 @@
 
 ## Tests
  - [ ] `.read()` w/ leading "./" for all `ArchiveClass`es
- - [ ] test files for skipped tests:
-   - [ ] `id_software.Pk3`
-   - [ ] `infinity_ward.Iwd`
-   - [ ] `ion_storm.Dat`
-   - [ ] `ion_storm.Pak`
-   - [ ] `pi_studios.Bpk`
-   - [ ] `ritual.Sin`
-   - [ ] `utoplanet.Apk`
 
 
 ## Planned Features
