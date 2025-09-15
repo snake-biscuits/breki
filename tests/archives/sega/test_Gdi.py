@@ -2,27 +2,35 @@ import pytest
 
 import os
 
+from breki import libraries
 # archive modules
 from breki.archives import pkware
 from breki.archives import sega
 # function
 from breki.archives import search_folder
 
-from breki import libraries
 
-
-gdi_dirs: libraries.LibraryGames
-gdi_dirs = {
+library = libraries.GameLibrary.from_config()
+gdi_dirs: libraries.LibraryGames = {
     "Dreamcast": {
         "Disc Images": [""]}}  # not looking in subdirs
 
-
-library = libraries.GameLibrary.from_config()
 gdis = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(gdi_dirs, "*.gdi")
     for short_path, full_path in paths}
-# TODO: check inside `.zip`s
+
+# scan inside zip files
+zip_gdis = dict()
+if library.Dreamcast is not None:
+    search_args = (pkware.Zip, library.Dreamcast, "*.gdi")
+    zip_gdis = {
+        f"Dreamcast | Archives | {os.path.split(gdi_)[-1]}": (zip_, gdi_)
+        for zip_, zip_gdis in search_folder(*search_args).items()
+        for gdi_ in zip_gdis}
+    zip_gdis = {
+        id_: (os.path.join(library.Dreamcast, zip_), gdi_)
+        for id_, (zip_, gdi_) in zip_gdis.items()}
 
 
 @pytest.mark.parametrize("filename", gdis.values(), ids=gdis.keys())
@@ -36,18 +44,6 @@ def test_from_file(filename: str):
     assert len(gdi.friends) == len(gdi.tracks)
     for track in gdi.tracks:
         assert track.name in gdi.friends
-
-
-# scan inside zip files
-if library.Dreamcast is not None:
-    search_args = (pkware.Zip, library.Dreamcast, "*.gdi")
-    zip_gdis = {
-        f"Dreamcast | Archives | {os.path.split(gdi_)[-1]}": (zip_, gdi_)
-        for zip_, zip_gdis in search_folder(*search_args).items()
-        for gdi_ in zip_gdis}
-    zip_gdis = {
-        id_: (os.path.join(library.Dreamcast, zip_), gdi_)
-        for id_, (zip_, gdi_) in zip_gdis.items()}
 
 
 @pytest.mark.parametrize(

@@ -11,17 +11,27 @@ from breki.archives import search_folder
 from breki import libraries
 
 
-cdi_dirs: libraries.LibraryGames
-cdi_dirs = {
+library = libraries.GameLibrary.from_config()
+cdi_dirs: libraries.LibraryGames = {
     "Dreamcast": {
         "Disc Images": [""]}}  # not looking in subdirs
 
-
-library = libraries.GameLibrary.from_config()
 cdis = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(cdi_dirs, "*.cdi")
     for short_path, full_path in paths}
+
+# scan inside zip files
+zip_cdis = dict()
+if library.Dreamcast is not None:
+    search_args = (pkware.Zip, library.Dreamcast, "*.cdi")
+    zip_cdis = {
+        f"Dreamcast | Archives | {os.path.split(cdi_)[-1]}": (zip_, cdi_)
+        for zip_, zip_cdis in search_folder(*search_args).items()
+        for cdi_ in zip_cdis}
+    zip_cdis = {
+        id_: (os.path.join(library.Dreamcast, zip_), cdi_)
+        for id_, (zip_, cdi_) in zip_cdis.items()}
 
 
 @pytest.mark.parametrize("filename", cdis.values(), ids=cdis.keys())
@@ -35,18 +45,6 @@ def test_from_file(filename: str):
     assert len(cdi.friends) == len(cdi.tracks)
     for track in cdi.tracks:
         assert track.name in cdi.friends
-
-
-# scan inside zip files
-if library.Dreamcast is not None:
-    search_args = (pkware.Zip, library.Dreamcast, "*.cdi")
-    zip_cdis = {
-        f"Dreamcast | Archives | {os.path.split(cdi_)[-1]}": (zip_, cdi_)
-        for zip_, zip_cdis in search_folder(*search_args).items()
-        for cdi_ in zip_cdis}
-    zip_cdis = {
-        id_: (os.path.join(library.Dreamcast, zip_), cdi_)
-        for id_, (zip_, cdi_) in zip_cdis.items()}
 
 
 @pytest.mark.parametrize(

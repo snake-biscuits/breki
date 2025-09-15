@@ -36,6 +36,7 @@ def test_from_file(filepath: str):
 
 
 # scan inside zip files
+zip_cues = dict()
 if library.Dreamcast is not None:
     search_args = (pkware.Zip, library.Dreamcast, "*.cue")
     zip_cues = {

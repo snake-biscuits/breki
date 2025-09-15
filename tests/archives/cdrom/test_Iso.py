@@ -34,8 +34,8 @@ discs = {
     for short_path, full_path in paths}
 
 # scan inside zip files
+zip_discs = dict()
 if library.Dreamcast is not None:
-    zip_discs = dict()
     for cls_id, pattern, disc_class in disc_classes:
         search_args = (pkware.Zip, library.Dreamcast, pattern)
         for zip_filepath, disc_filepaths in search_folder(*search_args).items():
