@@ -2,12 +2,12 @@
 # http://forum.xentax.com/viewtopic.php?f=10&t=4688&view=previous
 # -- Echelon & Isozone variants exist w/ other .pak files
 # -- partial winrar support?
-from __future__ import annotations
-import io
 from typing import Dict, List
 
+from .. import binary
 from .. import core
-from ..utils import binary
+from .. import files
+from ..files.parsed import parse_first
 from . import base
 
 
@@ -24,20 +24,21 @@ class Entry(core.Struct):
     _format = "3I"
 
 
-class Pak(base.Archive):
-    ext = "*.pak"
-    _file: io.BytesIO
+class Pak(base.Archive, files.BinaryFile):
+    exts = ["*.pak"]
     entries: Dict[str, Entry]
     # NOTE: names are currently placeholders
 
-    def __init__(self):
-        super().__init__()
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.entries = list()
 
+    @parse_first
     def __repr__(self) -> str:
-        descriptor = f"{len(self.entries)} files"
+        descriptor = f'"{self.filename}" {len(self.entries)} files'
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def namelist(self) -> List[str]:
         return [
             f"{entry.unknown:08X}"
@@ -45,29 +46,30 @@ class Pak(base.Archive):
                 self.entries.values(),
                 key=lambda e: (e.offset, e.length))]
 
-    def read(self, filepath: str) -> bytes:
-        assert filepath in self.entries
-        entry = self.entries[filepath]
-        self._file.seek(entry.offset + 8)
-        return self._file.read(entry.length)
-
-    def sizeof(self, filepath: str) -> int:
-        return self.entries[filepath].length
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Pak:
-        out = cls()
-        out._file = stream
-        assert stream.read(4) == b"NPCK", "not a .pak file"
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
+        assert self.stream.read(4) == b"NPCK", "not a .pak file"
         # guessing
-        num_entries = binary.read_struct(stream, "I")
-        out.entries = {
+        num_entries = binary.read_struct(self.stream, "I")
+        self.entries = {
             f"{entry.unknown:08X}": entry
             for entry in [
-                Entry.from_stream(stream)
+                Entry.from_stream(self.stream)
                 for i in range(num_entries)]}
         # NOTE: entries are listed in ascending `unknown` order
         # -- not in offset order
         # NOTE: some entries are 0 bytes in length
         # NOTE: 80 blank bytes at end of file unaccounted for?
-        return out
+
+    @parse_first
+    def read(self, filepath: str) -> bytes:
+        assert filepath in self.entries
+        entry = self.entries[filepath]
+        self.stream.seek(entry.offset + 8)
+        return self.stream.read(entry.length)
+
+    @parse_first
+    def sizeof(self, filepath: str) -> int:
+        return self.entries[filepath].length

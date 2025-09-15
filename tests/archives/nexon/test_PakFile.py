@@ -1,7 +1,7 @@
 from itertools import zip_longest
 
-from bsp_tool.archives import nexon
-from bsp_tool.utils import binary
+from breki.archives import nexon
+from breki import binary
 
 import pytest
 
@@ -41,10 +41,11 @@ pakfiles = {
     }
 
 
-@pytest.mark.parametrize("raw_pakfile", pakfiles.values(), ids=pakfiles.keys())
-def test_from_bytes(raw_pakfile: bytes):
+@pytest.mark.parametrize(
+    "filepath,raw_pakfile", pakfiles.items(), ids=pakfiles.keys())
+def test_from_bytes(filepath: str, raw_pakfile: bytes):
     # NOTE: also tests as_bytes
-    pakfile = nexon.PakFile.from_bytes(raw_pakfile)
+    pakfile = nexon.PakFile.from_bytes(filepath, raw_pakfile)
     pakfile_bytes = pakfile.as_bytes()
     # TODO: validate LocalFile.crc32
     # TODO: validate LocalFile matches CentralDirectory

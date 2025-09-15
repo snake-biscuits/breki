@@ -13,21 +13,15 @@
 
 
 ## Tests
-### Currently Broken
- - [ ] `tests/archives/`
-   - [ ] `test_ArchiveClass.py`
-   - [x] `id_software/test_Pak.py`
-   - [ ] `id_software/test_Pk3.py`
-   - [ ] `infinity_ward/test_Iwd.py`
-   - [ ] `ion_storm/test_Dat.py`
-   - [ ] `ion_storm/test_Pak.py`
-   - [ ] `nexon/test_PakFile.py`
-   - [ ] `pi_studios/test_Bpk.py`
-   - [ ] `respawn/test_RPak.py`
-   - [ ] `respawn/test_Vpk.py`
-   - [ ] `ritual/test_Sin.py`
-   - [ ] `utoplanet/test_Apk.py`
-   - [x] `valve/test_Vpk.py`
+ - [ ] `.read()` w/ leading "./" for all `ArchiveClass`es
+ - [ ] test files for skipped tests:
+   - [ ] `id_software.Pk3`
+   - [ ] `infinity_ward.Iwd`
+   - [ ] `ion_storm.Dat`
+   - [ ] `ion_storm.Pak`
+   - [ ] `pi_studios.Bpk`
+   - [ ] `ritual.Sin`
+   - [ ] `utoplanet.Apk`
 
 
 ## Planned Features

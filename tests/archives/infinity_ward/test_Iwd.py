@@ -1,26 +1,25 @@
 import pytest
 
-from bsp_tool.archives import infinity_ward
+from breki import libraries
+from breki.archives import infinity_ward
 
-from ... import files
 
-
-iwd_dirs: files.LibraryGames
+iwd_dirs: libraries.LibraryGames
 iwd_dirs = {
     "Steam": {
         "Call of Duty 2": ["Call of Duty 2/main/"]}}
 
 
-library = files.game_library()
+library = libraries.GameLibrary.from_config()
 iwds = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(iwd_dirs, "*.iwd")
     for short_path, full_path in paths}
 
 
-@pytest.mark.parametrize("filename", iwds.values(), ids=iwds.keys())
-def test_from_file(filename: str):
-    iwd = infinity_ward.Iwd.from_file(filename)
+@pytest.mark.parametrize("filepath", iwds.values(), ids=iwds.keys())
+def test_from_file(filepath: str):
+    iwd = infinity_ward.Iwd.from_file(filepath)
     namelist = iwd.namelist()
     assert isinstance(namelist, list), ".namelist() failed"
     if len(namelist) != 0:

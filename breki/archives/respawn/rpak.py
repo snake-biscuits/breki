@@ -1,13 +1,12 @@
 # https://github.com/r-ex/LegionPlus/
-from __future__ import annotations
 import datetime
 import enum
-import io
 from typing import Dict, List, Tuple, Union
 
+from ... import binary
 from ... import core
-from ... import external
-from ...utils import binary
+from ... import files
+from ...files.parsed import parse_first
 from .. import base
 
 
@@ -211,9 +210,9 @@ class RPakHeaderv8(core.MappedArray):
     _classes = {"flags": HeaderFlags, "compression": Compression, "created": FileTime}
 
 
-class RPak(base.Archive):
-    ext = "*.rpak"
-    extras: Dict[str, external.File]
+class RPak(base.Archive, files.BinaryFile):
+    exts = ["*.rpak"]
+    code_page = files.CodePage("utf-8", "strict")
     header: Union[RPakHeaderv6, RPakHeaderv7, RPakHeaderv8]
     starpaks: List[str]
     optimal_starpaks: List[str]
@@ -231,114 +230,139 @@ class RPak(base.Archive):
         8: AssetEntryv8}
     # ^ {version: AssetEntry}
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.extras = dict()
         self.optimal_starpaks = list()
         self.patch = None
         self.starpaks = list()
 
+    @parse_first
     def __repr__(self) -> str:
         hash_ = f"{self.header.hash:016X}"
         num_assets = self.header.num_asset_entries
-        descriptor = f"v{self.version} ({hash_}) {num_assets} assets"
+        descriptor = f'"{self.filename}" v{self.version} ({hash_}) {num_assets} assets'
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
-    def extra_patterns(self) -> List[str]:
+    @parse_first
+    def friend_patterns(self) -> Dict[str, files.DataType]:
         # NOTE: assuming all starpaks are in the same folder
         # "paks\\Win64\\example.starpak" -> "example.starpak"
-        return [
-            filename.replace("\\", "/").split("/")[-1]
-            for filename in (*self.optimal_starpaks, *self.starpaks)]
+        return {
+            filename.replace("\\", "/").split("/")[-1]: files.DataType.BINARY
+            for filename in (*self.optimal_starpaks, *self.starpaks)}
 
+    @parse_first
     def virtual_segment_data(self, index: int) -> bytes:
         assert index < len(self.virtual_segments)
-        start = sum(vs.size for vs in self.virtual_segments[:index] if not vs.flags & 64)
+        start = sum(
+            virtual_segment.size
+            for virtual_segment in self.virtual_segments[:index]
+            if not virtual_segment.flags & 64)
         length = self.virtual_segments[index].size
-        return self.data[start:start + length]
+        self.stream.seek(start)
+        return self.stream.read(length)
 
     # TODO: memory_page_data(self, index: int) -> bytes:
     # -- should be inside a virtual_segment, need relative offset
 
+    @parse_first
     def namelist(self) -> List[str]:
         # we cannot reverse name hashes
         if self.header.compression is not Compression.NONE:
             raise NotImplementedError("cannot decompress asset_entries")
         elif any(vs.flags == 1 and vs.type == 1 for vs in self.virtual_segments):
             # TODO: catch in .from_stream() & convert to Dict[str, AssetEntry]
-            names_segment_index = [i for i, vs in enumerate(self.virtual_segments) if vs.flags == 1 and vs.type == 1][0]
+            names_segment_index = [
+                i
+                for i, vs in enumerate(self.virtual_segments)
+                if vs.flags == 1 and vs.type == 1][0]
             raw_names = self.virtual_segment_data(names_segment_index)
             try:
-                names = [fn.decode() for fn in raw_names.split(b"\0")[:-1]]
+                names = [
+                    self.code_page.decode(filepath)
+                    for filepath in raw_names.split(b"\0")[:-1]]
             except UnicodeDecodeError:
                 assert names_segment_index + 1 < len(self.virtual_segments)
                 start = self.virtual_segment_data(names_segment_index).find(b"r2")
                 raw_names = b"".join([
                     self.virtual_segment_data(names_segment_index + 0)[start:],
                     self.virtual_segment_data(names_segment_index + 1)[:start]])
-                names = [fn.decode() for fn in raw_names.split(b"\0")[:-1]]
+                names = [
+                    filepath.decode()
+                    for filepath in raw_names.split(b"\0")[:-1]]
             assert len(names) == len(self.asset_entries)
             return sorted(names)
         else:
-            return sorted(f"{ae.magic.decode()}_{ae.name_hash:016X}" for ae in self.asset_entries)
+            return sorted(
+                f"{self.code_page.decode(entry.magic)}_{entry.name_hash:016X}"
+                for entry in self.asset_entries)
 
+    @parse_first
     def read(self, filepath: str) -> bytes:
         assert filepath in self.namelist()
         raise NotImplementedError("cannot parse StaRPak")
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> RPak:
-        out = cls()
-        assert binary.read_struct(stream, "4s") == b"RPak", "not a RPak file!"
-        out.version = binary.read_struct(stream, "H")
-        assert out.version in versions, f"unknown version: {out.version}"
-        stream.seek(-6, 1)  # back to the start
-        HeaderClass = cls.HeaderClasses[out.version]
-        out.header = HeaderClass.from_stream(stream)
-        assert out.header.patch_index < 16
-        if out.header.patch_index > 0:
-            out.patch = (
-                PatchHeader.from_stream(stream),
-                [CompressPair.from_stream(stream) for i in range(out.header.patch_index)],
-                [binary.read_struct(stream, "H") for i in range(out.header.patch_index)])  # "IndicesToFile"
-        if out.header.compression is not Compression.NONE:
-            return out
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
+        assert binary.read_struct(self.stream, "4s") == b"RPak", "not a RPak file!"
+        self.version = binary.read_struct(self.stream, "H")
+        assert self.version in versions, f"unknown version: {self.version}"
+        self.stream.seek(-6, 1)  # back to the start
+        HeaderClass = self.HeaderClasses[self.version]
+        self.header = HeaderClass.from_stream(self.stream)
+        assert self.header.patch_index < 16
+        if self.header.patch_index > 0:
+            self.patch = (
+                PatchHeader.from_stream(self.stream),
+                [
+                    CompressPair.from_stream(self.stream)
+                    for i in range(self.header.patch_index)],
+                [
+                    binary.read_struct(self.stream, "H")
+                    for i in range(self.header.patch_index)])  # "IndicesToFile"
+        if self.header.compression is not Compression.NONE:
+            return
             # TODO: decompress everything after the main header
             # uncompressed_rpak = b"".join([
-            #     out.header.as_bytes(),
-            #     decompress(out.header, stream)])
-            # stream = io.BytesIO(uncompressed_rpak)
-            # stream.seek(len(out.header.as_bytes()))
+            #     self.header.as_bytes(),
+            #     decompress(self.header, stream)])
+            # self.stream = io.BytesIO(uncompressed_rpak)
+            # self.stream.seek(len(self.header.as_bytes()))
         # StaRPak references
-        out.starpaks = [
-            fn.decode("utf-8", "strict")
-            for fn in stream.read(out.header.len_starpak_ref).split(b"\0")][:-1]
-        if out.version == 8:
-            out.optimal_starpaks = [
-                fn.decode("utf-8", "strict")
-                for fn in stream.read(out.header.len_opt_starpak_ref).split(b"\0")][:-1]
-        out.virtual_segments = [
-            VirtualSegment.from_stream(stream)
-            for i in range(out.header.num_virtual_segments)]
-        out.memory_pages = [
-            MemoryPage.from_stream(stream)
-            for i in range(out.header.num_memory_pages)]
-        out.descriptors = [
-            Descriptor.from_stream(stream)
-            for i in range(out.header.num_descriptors)]
-        AssetEntryClass = out.AssetEntryClasses[out.version]
-        out.asset_entries = [
-            AssetEntryClass.from_stream(stream)
-            for i in range(out.header.num_asset_entries)]
-        out.guid_descriptors = [
-            Descriptor.from_stream(stream)
-            for i in range(out.header.num_guid_descriptors)]
-        out.relations = binary.read_struct(stream, f"{out.header.num_relations}I")
+        raw_starpak_refs = self.stream.read(self.header.len_starpak_ref)
+        self.starpaks = [
+            self.code_page.decode(filepath)
+            for filepath in raw_starpak_refs.split(b"\0")][:-1]
+        if self.version == 8:
+            raw_opt_starpak_refs = self.stream.read(self.header.len_opt_starpak_ref)
+            self.optimal_starpaks = [
+                self.code_page.decode(filepath)
+                for filepath in raw_opt_starpak_refs.split(b"\0")][:-1]
+        # TODO: files.lumps
+        self.virtual_segments = [
+            VirtualSegment.from_stream(self.stream)
+            for i in range(self.header.num_virtual_segments)]
+        self.memory_pages = [
+            MemoryPage.from_stream(self.stream)
+            for i in range(self.header.num_memory_pages)]
+        self.descriptors = [
+            Descriptor.from_stream(self.stream)
+            for i in range(self.header.num_descriptors)]
+        AssetEntryClass = self.AssetEntryClasses[self.version]
+        self.asset_entries = [
+            AssetEntryClass.from_stream(self.stream)
+            for i in range(self.header.num_asset_entries)]
+        self.guid_descriptors = [
+            Descriptor.from_stream(self.stream)
+            for i in range(self.header.num_guid_descriptors)]
+        self.relations = binary.read_struct(
+            self.stream, f"{self.header.num_relations}I")
         # TODO: parse the rest of the file
         # virtual_segment data (unless flags & 0x40) & some other unknown data
         # TODO: around 200 bytes of non-virtual_segment data in some client_temp.rpak
-        out.data = stream.read()
-        out._file = stream
-        return out
 
 
 # StaRPak
@@ -347,32 +371,26 @@ class StreamEntry(core.MappedArray):
     _format = "2Q"
 
 
-class StaRPak:
+class StaRPak(files.BinaryFile):
     # NOTE: not an archive! just contains data for RPak
     # https://github.com/r-ex/LegionPlus/blob/main/Legion/src/RpakLib.cpp
     # -- RpakLib::MountStarpak
-    ext = "*.starpak"  # or "*.opt.starpak"
+    exts = ["*.starpak", "*.opt.starpak"]
     entries: List[StreamEntry]
-    _file: io.BytesIO
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.entries = list()
 
-    @classmethod
-    def from_bytes(cls, data: bytes) -> StaRPak:
-        return cls.from_stream(io.BytesIO(data))
-
-    @classmethod
-    def from_file(cls, filename: str) -> StaRPak:
-        return cls.from_stream(open(filename, "rb"))
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> StaRPak:
-        assert binary.read_struct(stream, "4s") == b"SRPk"
-        assert binary.read_struct(stream, "I") == 1  # version?
-        out = cls()
-        stream.seek(-8, 2)
-        num_entries = binary.read_struct(stream, "Q")
-        stream.seek(-(8 + num_entries * 16), 2)
-        out.entries = [StreamEntry.from_stream(stream) for i in range(num_entries)]
-        return out
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
+        assert binary.read_struct(self.stream, "4s") == b"SRPk"
+        assert binary.read_struct(self.stream, "I") == 1  # version?
+        self.stream.seek(-8, 2)
+        num_entries = binary.read_struct(self.stream, "Q")
+        self.stream.seek(-(8 + num_entries * 16), 2)
+        self.entries = [
+            StreamEntry.from_stream(self.stream)
+            for i in range(num_entries)]

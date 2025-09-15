@@ -1,28 +1,26 @@
 import pytest
 
-from bsp_tool.archives import ion_storm
+from breki import libraries
+from breki.archives import ion_storm
 
-from ... import files
 
-
-dat_dirs: files.LibraryGames
-dat_dirs = {
+library = libraries.GameLibrary.from_config()
+dat_dirs: libraries.LibraryGames = {
     "Steam": {
         "Anachronox": ["Anachronox/anoxdata"]}}
 
-
-library = files.game_library()
 dats = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(dat_dirs, "*.dat")
     for short_path, full_path in paths}
 
 
-@pytest.mark.parametrize("filename", dats.values(), ids=dats.keys())
-def test_from_file(filename: str):
-    dat = ion_storm.Dat.from_file(filename)
+@pytest.mark.parametrize("filepath", dats.values(), ids=dats.keys())
+def test_from_file(filepath: str):
+    dat = ion_storm.Dat.from_file(filepath)
     namelist = dat.namelist()
     assert isinstance(namelist, list), ".namelist() failed"
     if len(namelist) != 0:
         first_file = dat.read(namelist[0])
         assert isinstance(first_file, bytes), ".read() failed"
+        # TODO: .read() w/ leading "./"

@@ -3,7 +3,9 @@ import io
 from typing import Dict, List
 
 from ... import core
-from ...utils import binary
+from ... import binary
+from ... import files
+from ...files.parsed import parse_first
 from .. import valve
 from .rpak import RPak
 
@@ -27,7 +29,8 @@ class VpkEntry:
     preload_length: int
     file_parts: List[VpkFilePart]
     # properties
-    is_compressed: bool = property(lambda s: any(fp.is_compressed for fp in s.file_parts))
+    is_compressed: bool = property(
+        lambda s: any(fp.is_compressed for fp in s.file_parts))
 
     def __init__(self):
         self.file_parts = list()
@@ -83,80 +86,78 @@ class VpkFilePart:
 
 class Vpk(valve.Vpk):
     """*_dir.vpk only!"""
-    ext = "*_dir.vpk"
-    base_filename: str
-    _file: io.BytesIO
-    filename: str
+    exts = ["*_dir.vpk"]
+    code_page = files.CodePage("latin_1", "strict")
     header: VpkHeader
     entries: Dict[str, VpkEntry]
     # NOTE: 'versions' is unused; only v2.3 is supported
 
-    def __init__(self, filename: str = "untitled_dir.vpk"):
-        super().__init__(filename)
+    @property
+    def friend_patterns(self) -> Dict[str, files.DataType]:
         # "<language>client_*_dir.vpk" -> "client_*"
         assert self.filename.endswith("_dir.vpk")
-        language_length = filename.find("client_")
+        language_length = self.filename.find("client_")
         assert language_length != -1
-        self.base_filename = self.filename[language_length:-len("_dir.vpk")]
+        base_filename = self.filename[language_length:-8]
+        return {f"{base_filename}_*.vpk": files.DataType.BINARY}
 
-    def extra_patterns(self) -> str:
-        return [f"{self.base_filename}_*.vpk"]
-        # NOTE: accurate, but very slow
-        # return [
-        #     f"{self.base_filename}_{index:03d}.vpk"
-        #     for index in {
-        #         file_part.archive_index
-        #         for entry in self.entries.values()
-        #         for file_part in entry.file_parts}]
+    def archive_vpk(self, index: int) -> files.File:
+        # "<language>client_*_dir.vpk" -> "client_*"
+        assert self.filename.endswith("_dir.vpk")
+        language_length = self.filename.find("client_")
+        assert language_length != -1
+        base_filename = self.filename[language_length:-8]
+        return self.friends[f"{base_filename}_{index:03d}.vpk"]
 
-    def read(self, filename: str) -> bytes:
-        assert filename in self.namelist()
-        entry = self.entries[filename]
-        if entry.is_compressed:
-            raise NotImplementedError("cannot decompress, yet.")
-            # TODO: lzham decompress the compressed file_parts
-        parts = list()
-        for file_part in entry.file_parts:
-            stream = self.archive_vpk(file_part.archive_index)
-            stream.seek(file_part.offset)
-            data = stream.read(file_part.length)
-            assert len(data) == file_part.length, "unexpected EOF"
-            parts.append(data)
-        return b"".join(parts)
-
-    def sizeof(self, filename: str) -> int:
-        return sum(fp.length for fp in self.entries[filename].file_parts)
-
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO, filename: str = "untitled_dir.vpk") -> Vpk:
-        out = cls(filename)
-        out._file = stream
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
         # header
-        out.header = VpkHeader.from_stream(out._file)
-        assert out.header.magic == 0x55AA1234
-        version = tuple(out.header.version)
+        self.header = VpkHeader.from_stream(self.stream)
+        assert self.header.magic == 0x55AA1234
+        version = tuple(self.header.version)
         if version != (2, 3):
             version_str = ".".join(map(str, version))
             raise NotImplementedError(f"Vpk v{version_str} is not supported")
         # tree
-        assert out.header.tree_length != 0, "no files?"
+        assert self.header.tree_length != 0, "no files?"
         while True:
-            extension = binary.read_str(out._file, encoding="latin_1")
+            extension = binary.read_str(self.stream, *self.code_page)
             if extension == "":
                 break  # end of tree
             while True:
-                folder = binary.read_str(out._file, encoding="latin_1")
+                folder = binary.read_str(self.stream, *self.code_page)
                 if folder == "":
                     break  # end of extension
                 while True:
-                    filename = binary.read_str(out._file, encoding="latin_1")
+                    filename = binary.read_str(self.stream, *self.code_page)
                     if filename == "":
                         break  # end of folder
                     if folder != " ":  # not in root folder
                         entry_path = f"{folder}/{filename}.{extension}"
                     else:
                         entry_path = f"{filename}.{extension}"
-                    out.entries[entry_path] = VpkEntry.from_stream(out._file)
+                    self.entries[entry_path] = VpkEntry.from_stream(self.stream)
                     # NOTE: we don't save preload, unlike valve.Vpk
-        assert out._file.tell() == 16 + out.header.tree_length, "overshot tree"
-        return out
+        assert self.stream.tell() == 16 + self.header.tree_length, "overshot tree"
+
+    @parse_first
+    def read(self, filepath: str) -> bytes:
+        assert filepath in self.namelist()
+        entry = self.entries[filepath]
+        if entry.is_compressed:
+            raise NotImplementedError("cannot decompress, yet.")
+            # TODO: lzham decompress the compressed file_parts
+        parts = list()
+        for file_part in entry.file_parts:
+            stream = self.archive_vpk(file_part.archive_index).stream
+            stream.seek(file_part.offset)
+            data = stream.read(file_part.length)
+            assert len(data) == file_part.length, "unexpected EOF"
+            parts.append(data)
+        return b"".join(parts)
+
+    @parse_first
+    def sizeof(self, filepath: str) -> int:
+        return sum(fp.length for fp in self.entries[filepath].file_parts)

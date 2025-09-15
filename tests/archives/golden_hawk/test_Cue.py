@@ -2,22 +2,19 @@ import pytest
 
 import os
 
+from breki import libraries
 # archive modules
 from breki.archives import golden_hawk
 from breki.archives import pkware
 # function
 from breki.archives import search_folder
 
-from breki import libraries
 
-
-cue_dirs: libraries.LibraryGames
-cue_dirs = {
+library = libraries.GameLibrary.from_config()
+cue_dirs: libraries.LibraryGames = {
     "Dreamcast": {
         "Disc Images": [""]}}  # not looking in subdirs
 
-
-library = libraries.GameLibrary.from_config()
 cues = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(cue_dirs, "*.cue")

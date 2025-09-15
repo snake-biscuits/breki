@@ -1,59 +1,37 @@
 import pytest
 
-from bsp_tool.archives import base
-from bsp_tool.archives import bluepoint
-from bsp_tool.archives import cdrom
-from bsp_tool.archives import gearbox
-from bsp_tool.archives import id_software
-from bsp_tool.archives import infinity_ward
-from bsp_tool.archives import ion_storm
-from bsp_tool.archives import nexon
-from bsp_tool.archives import pi_studios
-from bsp_tool.archives import pkware
-from bsp_tool.archives import respawn
-from bsp_tool.archives import sega
-from bsp_tool.archives import utoplanet
-from bsp_tool.archives import valve
+from breki.archives.base import Archive
 
 
-archive_classes = [
-    bluepoint.Bpk,
-    cdrom.Iso,
-    gearbox.Nightfire007,
-    id_software.Pak,
-    id_software.Pk3,
-    infinity_ward.FastFile,
-    infinity_ward.Iwd,
-    ion_storm.Dat,
-    ion_storm.Pak,
-    nexon.Hfs,
-    nexon.PakFile,
-    nexon.Pkg,
-    pi_studios.Bpk,
-    pkware.Zip,
-    respawn.RPak,
-    respawn.Vpk,
-    sega.GDRom,
-    utoplanet.Apk,
-    valve.Vpk]
+def all_subclasses_of(cls):
+    for sc in cls.__subclasses__():
+        yield sc
+        for ssc in all_subclasses_of(sc):
+            yield ssc
 
 
-def class_name(cls: object) -> str:
-    short_module = cls.__module__.split(".")[-1]
-    return ".".join([short_module, cls.__name__])
+archive_classes = {
+    f"{cls.__module__.rpartition('.')[-1]}.{cls.__name__}": cls
+    for cls in all_subclasses_of(Archive)}
 
 
-@pytest.mark.parametrize("archive_class", archive_classes, ids=map(class_name, archive_classes))
+@pytest.mark.parametrize("archive_class", archive_classes.values(), ids=archive_classes.keys())
 def test_in_spec(archive_class: object):
-    assert issubclass(archive_class, base.Archive), "not a base.Archive subclass"
-    assert hasattr(archive_class, "ext"), "ext not specified"
-    assert isinstance(archive_class.ext, str), "ext must be of type str"
-    assert archive_class.ext.startswith("*"), "ext must start with wildcard"
-    # NOTE: mostly "*.ext", but "*_dir.vpk" breaks the pattern
-    assert hasattr(archive_class, "namelist"), "no namelist method"
-    assert hasattr(archive_class, "read"), "no read method"
+    assert issubclass(archive_class, Archive), "not a base.Archive subclass"
+    assert hasattr(archive_class, "exts"), "exts not specified"
+    assert isinstance(archive_class.exts, (list, dict)), "exts must be of type list"
+    # NOTE: sega.GDRom is a FriendlyHybridFile, since it wraps multiple DiscImage formats
+    for ext in archive_class.exts:
+        assert isinstance(ext, str), "ext must be of type str"
+        assert "*" in ext, "ext must contain a wildcard"
+        # NOTE: mostly "*.ext", but "*_dir.vpk" breaks that pattern
+        # -- "pack*.vpk" for troika.Vpk breaks the pattern even more
     # NOTE: base.Archive provides defaults for all essential methods
     # -- but most raise NotImplementedError
-    # -- .from_stream(), .namelist() & .read() must all be implemented by the subclass
+    # -- .parse(), .namelist() & .read() must all be implemented by the subclass
     # -- each subclass will need it's own tests for those methods
     # -- as well as confirming __init__ creates an empty ArchiveClass
+    # -- we also need to confirm parse() is called before namelist, read, extract etc.
+    # -- and that .parse() sets .is_parsed to True
+    # NOTE: .read() w/ leading "./" is important to test for
+    # -- since FriendlyFile always looks in "./" for friends in top-level folders

@@ -74,6 +74,8 @@ class Vpk(base.Archive, files.FriendlyBinaryFile):
 
     @property
     def friend_patterns(self) -> Dict[str, files.DataType]:
+        if not self.is_parsed:
+            self.parse()
         if self.filename.endswith("_dir.vpk"):
             return {
                 f"{self.filename[:-8]}_{index:03d}.vpk": files.DataType.BINARY
@@ -93,7 +95,7 @@ class Vpk(base.Archive, files.FriendlyBinaryFile):
         entry = self.entries[filename]
         if entry.archive_index != 0x7FFF:
             assert self.filename.endswith("_dir.vpk")
-            stream = self.archive_vpk(entry.archive_index)
+            stream = self.archive_vpk(entry.archive_index).stream
         else:
             stream = self.stream
         stream.seek(entry.archive_offset)

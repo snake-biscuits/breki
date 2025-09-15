@@ -3,16 +3,29 @@ from __future__ import annotations
 import binascii
 import enum
 import io
+import lzma
 import struct
 from typing import Dict, List
 
-from .. import valve
-from ..utils import binary
+from .. import binary
+from .. import core
+from .. import files
+from ..files.parsed import parse_first
 from . import base
 
 
+def decompress(data: bytes) -> bytes:
+    """valve LZMA header adapter"""
+    magic, true_size, compressed_size, properties = struct.unpack("4s2I5s", data[:17])
+    assert magic == b"LZMA"
+    _filter = lzma._decode_filter_properties(lzma.FILTER_LZMA1, properties)
+    decompressor = lzma.LZMADecompressor(lzma.FORMAT_RAW, None, [_filter])
+    decompressed_data = decompressor.decompress(data[17:17 + compressed_size])
+    return decompressed_data[:true_size]  # trim any excess bytes
+
+
 class Hfs(base.Archive):
-    ext = "*.hfs"
+    exts = ["*.hfs"]
 
     def __init__(self, filename: str):
         raise NotImplementedError()
@@ -55,7 +68,7 @@ class PakLocalFile:
     def as_bytes(self) -> bytes:
         # TODO: compress data (optional)
         if self.compressed_size != 0:
-            data = valve.decompress(self.data)
+            data = decompress(self.data)
         else:
             data = self.data
         # rebuild header
@@ -71,7 +84,7 @@ class PakLocalFile:
             data])
 
 
-class PakCentralDirectory:
+class PakCentralDirectory():  # can't use core.Struct (bad alignment)
     """preceded by magic CS\x01\x02"""
     # header
     unused: int  # always 0
@@ -81,10 +94,11 @@ class PakCentralDirectory:
     path_size: int
     unknown: int
     header_offset: int  # file offset of LocalFile
-    # data
-    path: str
 
-    # TODO: __init__(self, local_file: LocalFile, offset: int):
+    # __slots__ = [
+    #     "unused", "crc32", "uncompressed_size", "compressed_size",
+    #     "path_size", "unknown", "header_offset"]
+    # _format = "H4IHI"  # alignment hell
 
     def __repr__(self) -> str:
         return f'<{self.__class__.__name__} {self.path!r} @ 0x{id(self):016X}>'
@@ -99,7 +113,6 @@ class PakCentralDirectory:
         out.path_size = binary.read_struct(stream, "I")
         out.unknown = binary.read_struct(stream, "H")
         out.header_offset = binary.read_struct(stream, "I")
-        out.path = stream.read(out.path_size).decode("latin_1")
         return out
 
     def as_bytes(self) -> bytes:
@@ -110,17 +123,18 @@ class PakCentralDirectory:
             self.compressed_size.to_bytes(4, "little"),
             self.path_size.to_bytes(4, "little"),
             self.unknown.to_bytes(2, "little"),
-            self.header_offset.to_bytes(4, "little"),
-            self.path.encode("latin_1")])
+            self.header_offset.to_bytes(4, "little")])
 
 
-class PakEOCD:  # End of Central Directory
+class PakEOCD(core.Struct):  # End of Central Directory
     """preceded by magic CS\x05\x06"""
     unused_1: int  # always 0
     num_local_files: int
     num_central_directories: int
-    sizeof_central_directories: int  # 28 * num_central_directories + sum(len(cd.path) for cd in central_directories)
-    sizeof_local_files: int  # 22 * num_local_files + sum(len(lf.path) + len(lf.data) for lf in local_files)
+    sizeof_central_directories: int
+    # ^ 28 * num_central_directories + sum(len(cd.path) for cd in central_directories)
+    sizeof_local_files: int
+    # ^ 22 * num_local_files + sum(len(lf.path) + len(lf.data) for lf in local_files)
     # sizeof_central_directories + sizeof_local_files + 25 == len(raw_lump)
     one: int  # always 1
     unused_2: int  # always 0
@@ -130,72 +144,63 @@ class PakEOCD:  # End of Central Directory
         "unused_2"]
     _format = "I2H3IB"
 
-    def __repr__(self) -> str:
-        attrs = ", ".join([
-            f"{attr}={getattr(self, attr)!r}"
-            for attr in self.__slots__])
-        return f"{self.__class__.__name__}({attrs})"
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> PakEOCD:
-        out = cls()
-        for attr, val in zip(cls.__slots__, binary.read_struct(stream, cls._format)):
-            setattr(out, attr, val)
-        return out
-
-    def as_bytes(self) -> bytes:
-        return struct.pack(self._format, *[
-            getattr(self, attr)
-            for attr in self.__slots__])
-
-
-class PakFile(base.Archive):
+class PakFile(base.Archive, files.BinaryFile):
     """Nexon's cursed custom pkware.Zip implementation"""
-    ext = "*.zip"
+    exts = ["*.zip"]
     # NOTE: only exists inside .bsp; but it's based on pkware.Zip
+    code_page = files.CodePage("latin_1", "strict")
+    # entries
     local_files: Dict[str, PakLocalFile]  # contains data
     # metadata
     central_directories: Dict[str, PakCentralDirectory]
     eocd: PakEOCD
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.local_files = dict()
         self.central_directories = dict()
         self.eocd = PakEOCD()
         # NOTE: these defaults won't nessecarily save to a valid empty PakFile
 
+    @parse_first
     def __repr__(self) -> str:
-        descriptor = f"{len(self.local_files)} files"
+        descriptor = f'"{self.filename}" {len(self.local_files)} files'
         return f"<{self.__class__.__name__} {descriptor} @ 0x{id(self):016X}>"
 
+    @parse_first
     def namelist(self) -> List[str]:
         return sorted(self.local_files.keys())
 
-    def read(self, path: str) -> bytes:
-        local_file = self.local_files[path]
+    @parse_first
+    def read(self, filepath: str) -> bytes:
+        local_file = self.local_files[filepath]
         if local_file.compressed_size == 0:
             return local_file.data
         else:  # decompress
-            return valve.decompress(local_file.data)
+            return decompress(local_file.data)
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> PakFile:
-        out = cls()
-        magic = PakMagic(stream.read(4))
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
+        magic = PakMagic(self.stream.read(4))
         while magic == PakMagic.LocalFile:
-            local_file = PakLocalFile.from_stream(stream)
-            out.local_files[local_file.path] = local_file
-            magic = PakMagic(stream.read(4))
+            local_file = PakLocalFile.from_stream(self.stream)
+            self.local_files[local_file.path] = local_file
+            magic = PakMagic(self.stream.read(4))
         while magic == PakMagic.CentralDirectory:
-            cd = PakCentralDirectory.from_stream(stream)
-            out.central_directories[cd.path] = cd
-            magic = PakMagic(stream.read(4))
+            cd = PakCentralDirectory.from_stream(self.stream)
+            filepath = self.stream.read(cd.path_size)
+            filepath = self.code_page.decode(filepath)
+            self.central_directories[filepath] = cd
+            magic = PakMagic(self.stream.read(4))
         assert magic == PakMagic.EOCD
-        out.eocd = PakEOCD.from_stream(stream)
-        assert len(out.local_files) == out.eocd.num_local_files
-        assert len(out.central_directories) == out.eocd.num_central_directories
-        return out
+        self.eocd = PakEOCD.from_stream(self.stream)
+        assert len(self.local_files) == self.eocd.num_local_files
+        assert len(self.central_directories) == self.eocd.num_central_directories
 
+    @parse_first
     def as_bytes(self):
         # NOTE: decompresses all data
         out = list()
@@ -204,9 +209,10 @@ class PakFile(base.Archive):
             out.append(PakMagic.LocalFile.value)
             out.append(local_file.as_bytes())
         # TODO: generate new CentralDirectories
-        for central_directory in self.central_directories.values():
+        for filepath, central_directory in self.central_directories.items():
             out.append(PakMagic.CentralDirectory.value)
             out.append(central_directory.as_bytes())
+            out.append(self.code_page.encode(filepath))
         # TODO: generate new EOCD
         out.append(PakMagic.EOCD.value)
         out.append(self.eocd.as_bytes())
@@ -215,7 +221,7 @@ class PakFile(base.Archive):
 
 
 class Pkg(base.Archive):
-    ext = "*.pkg"
+    exts = ["*.pkg"]
 
     def __init__(self, filename: str):
         raise NotImplementedError()

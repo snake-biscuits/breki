@@ -4,10 +4,10 @@ from breki import libraries
 from breki.archives import id_software
 
 
+library = libraries.GameLibrary.from_config()
 # TODO: Heretic II
 # TODO: Quake64 in %USERPROFILE%
-pak_dirs: libraries.LibraryGames
-pak_dirs = {
+pak_dirs: libraries.LibraryGames = {
     "Steam": {
         "Hexen 2": ["Hexen 2/data1"],
         "Quake": ["Quake/Id1"],
@@ -35,8 +35,6 @@ pak_dirs = {
     "GoG": {
         "Soldier of Fortune": ["Soldier of Fortune/base"]}}
 
-
-library = libraries.GameLibrary.from_config()
 paks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(pak_dirs, "*.pak")

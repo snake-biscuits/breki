@@ -1,17 +1,14 @@
 import pytest
 
-from bsp_tool.archives import ion_storm
+from breki import libraries
+from breki.archives import ion_storm
 
-from ... import files
 
-
-pak_dirs: files.LibraryGames
-pak_dirs = {
+library = libraries.GameLibrary.from_config()
+pak_dirs: libraries.LibraryGames = {
     "Steam": {
         "Daikatana": ["Daikatana/data"]}}
 
-
-library = files.game_library()
 paks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(pak_dirs, "*.pak")
@@ -28,3 +25,4 @@ def test_from_file(filename: str):
     if len(namelist) != 0:
         first_file = pak.read(namelist[0])
         assert isinstance(first_file, bytes), ".read() failed"
+        # TODO: .read() w/ leading "./"

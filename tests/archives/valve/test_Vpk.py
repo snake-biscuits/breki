@@ -4,8 +4,8 @@ from breki import libraries
 from breki.archives import valve
 
 
-vpk_dirs: libraries.LibraryGames
-vpk_dirs = {
+library = libraries.GameLibrary.from_config()
+vpk_dirs: libraries.LibraryGames = {
     "Steam": {
         "Black Mesa": ["Black Mesa/bms/"],
         "Bloody Good Time": ["Bloody Good Time/vpks/"],
@@ -25,16 +25,17 @@ vpk_dirs = {
 # NOTE: The Ship's shares it's vpks between "games"
 # -- by downloading it once for each folder...
 
-
-library = libraries.GameLibrary.from_config()
 vpks = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(vpk_dirs, "*_dir.vpk")
     for short_path, full_path in paths}
 
 
-@pytest.mark.parametrize("filename", vpks.values(), ids=vpks.keys())
-def test_from_file(filename: str):
-    vpk = valve.Vpk.from_file(filename)
-    assert isinstance(vpk.namelist(), list)
-    # TODO: try a read
+@pytest.mark.parametrize("filepath", vpks.values(), ids=vpks.keys())
+def test_from_file(filepath: str):
+    vpk = valve.Vpk.from_file(filepath)
+    namelist = vpk.namelist()
+    assert isinstance(namelist, list)
+    if len(namelist) != 0:
+        first_file = vpk.read(namelist[0])
+        assert isinstance(first_file, bytes), ".read() failed"

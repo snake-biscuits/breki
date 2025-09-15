@@ -13,20 +13,14 @@ def all_subclasses_of(cls):
 disc_classes = {
     f"{cls.__module__.rpartition('.')[-1]}.{cls.__name__}": cls
     for cls in all_subclasses_of(DiscImage)}
-# should be:
-# -- alcohol.Mds
-# -- golden_hawk.Cue
-# -- mame.Chd
-# -- padus.Cdi
-# -- sega.Gdi
 
 
 @pytest.mark.parametrize(
     "disc_class", disc_classes.values(), ids=disc_classes.keys())
 def test_in_spec(disc_class: object):
     assert issubclass(disc_class, DiscImage), "not a base.DiscImage subclass"
-    assert hasattr(disc_class, "exts"), "ext not specified"
-    assert isinstance(disc_class.exts, list), "ext must be of type str"
+    assert hasattr(disc_class, "exts"), "exts not specified"
+    assert isinstance(disc_class.exts, list), "exts must be of type list"
     for ext in disc_class.exts:
         assert isinstance(ext, str), "ext must be of type str"
         assert ext.startswith("*."), "ext must start with wildcard"

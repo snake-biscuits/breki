@@ -1,25 +1,24 @@
-import fnmatch
-import os
-
 import pytest
 
-from bsp_tool.archives import utoplanet
-
-from ... import files
-
-
-apks = dict()
-librarian = files.library_card()
-if librarian == ("bikkie", "ITANI_WAYSOUND"):
-    apk_dir = "C:/PlayGra/Merubasu/shadowland/"
-    apks = {
-        f"Merubasu | {apk_filename}": os.path.join(apk_dir, apk_filename)
-        for apk_filename in fnmatch.filter(os.listdir(apk_dir), "*.apk")}
+from breki import libraries
+from breki.archives import utoplanet
 
 
-@pytest.mark.parametrize("filename", apks.values(), ids=apks.keys())
-def test_from_file(filename: str):
-    apk = utoplanet.Apk.from_file(filename)
+library = libraries.GameLibrary.from_config()
+apk_dirs: libraries.LibraryGames = {
+    "Mod": {
+        "Merubasu": ["Merubasu/shadowland"]}}
+# copied from install @ "C:/PlayGra/Merubasu/"
+
+apks = {
+    f"{game} | {short_path}": full_path
+    for section, game, paths in library.scan(apk_dirs, "*.apk")
+    for short_path, full_path in paths}
+
+
+@pytest.mark.parametrize("filepath", apks.values(), ids=apks.keys())
+def test_from_file(filepath: str):
+    apk = utoplanet.Apk.from_file(filepath)
     namelist = apk.namelist()
     assert isinstance(namelist, list), ".namelist() failed"
     first_file = apk.read(namelist[0])

@@ -1,19 +1,19 @@
 # https://github.com/ZoneTool/zonetool/
 # https://github.com/RagdollPhysics/zonebuilder/
-from __future__ import annotations
 import enum
 import io
 from typing import List
 import zlib
 
+from .. import binary
 from .. import core
-from ..utils import binary
+from .. import files
 from . import base
 from . import id_software
 
 
 class Iwd(id_software.Pk3):
-    ext = "*.iwd"
+    exts = ["*.iwd"]
 
 
 class Header(core.Struct):
@@ -70,57 +70,58 @@ class AssetType(enum.Enum):
     STRING_TABLE = 0x20  # .csv
 
 
-class FastFile(base.Archive):
+class FastFile(base.Archive, files.BinaryFile):
     """specifically for IW3 (Call of Duty 4: Modern Warfare)"""
-    ext = "*.ff"
-    raw: io.BytesIO  # uncompressed data
+    exts = ["*.ff"]
     header: Header
     header2: Header2
     pointers: List[int]  # linked to strings? almost always -1; sometimes 0
     strings: List[str]
     asset_types: List[AssetType]
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.pointers = list()
         self.strings = list()
         self.asset_types = list()
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> FastFile:
-        out = cls()
-        magic, version = binary.read_struct(stream, "8sI")
+    # TODO: .namelist() & .read() [@parse_first]
+
+    def parse(self):
+        magic, version = binary.read_struct(self.stream, "8sI")
         assert magic == b"IWffu100", "not a FastFile"
         if version != 5:
             raise NotImplementedError(f"FastFile v{version} not supported")
         # decompress
-        decompressed_data = zlib.decompress(stream.read())
-        out.raw = io.BytesIO(decompressed_data)
+        decompressed_data = zlib.decompress(self.stream.read())
+        self.stream = io.BytesIO(decompressed_data)  # OVERRIDE
         # parse
-        out.header = Header.from_stream(out.raw)
-        assert out.header.decompressed_size + 44 == len(decompressed_data)
-        out.header2 = Header2.from_stream(out.raw)
+        self.header = Header.from_stream(self.stream)
+        assert self.header.decompressed_size + 44 == len(decompressed_data)
+        self.header2 = Header2.from_stream(self.stream)
         # optional block of pointers? & strings
-        if out.header2.num_pointers != 0:
-            assert out.header2.unknown == -1  # observed, but not understood
-            out.pointers = binary.read_struct(out.raw, f"{out.header2.num_pointers}i")
-            num_strings = out.pointers.count(-1)
-            out.strings = [
-                binary.read_str(out.raw)
+        if self.header2.num_pointers != 0:
+            assert self.header2.unknown == -1  # observed, but not understood
+            self.pointers = binary.read_struct(
+                self.stream, f"{self.header2.num_pointers}i")
+            num_strings = self.pointers.count(-1)
+            self.strings = [
+                binary.read_str(self.stream, *self.code_page)
                 for i in range(num_strings)]
-            assert out.strings[-1] != ""
+            assert self.strings[-1] != ""
         else:  # "*_load.ff"?
-            assert out.header2.unknown == 0  # observed, but not understood
-        assert out.header2.unused == -1
+            assert self.header2.unknown == 0  # observed, but not understood
+        assert self.header2.unused == -1
         # block of asset types
-        for i in range(out.header2.num_assets):
-            asset_type, separator = binary.read_struct(out.raw, "Ii")
+        for i in range(self.header2.num_assets):
+            asset_type, separator = binary.read_struct(self.stream, "Ii")
             try:
-                out.asset_types.append(AssetType(asset_type))
+                self.asset_types.append(AssetType(asset_type))
                 assert separator == -1
             except Exception:  # code_post_gfx{,_mp}
                 print(f"!!! FAIL !!! {i=} {asset_type=:08X} {separator=:08X}")
-                return out
-        assert binary.read_struct(out.raw, "i") == -1  # terminator
+                return
+        assert binary.read_struct(self.stream, "i") == -1  # terminator
         # NOTE: from here we have a list of assets (matching asset_types)
         # -- no indication of offset or length anywhere
         # -- we will have to parse enough to calcuate lengths
@@ -128,4 +129,3 @@ class FastFile(base.Archive):
         # TODO: create lookup table for .namelist() & .read()
         # -- out.assets = {"filename": (AssetType, offset, length)}
         ...
-        return out

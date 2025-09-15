@@ -1,11 +1,10 @@
 import pytest
 
-from bsp_tool.archives import id_software
+from breki import libraries
+from breki.archives import id_software
 
-from ... import files
 
-
-pk3_dirs: files.LibraryGames
+pk3_dirs: libraries.LibraryGames
 pk3_dirs = {
     "Steam": {
         "Call of Duty": ["Call of Duty/Main/"],
@@ -44,16 +43,16 @@ pk3_dirs = {
 # TODO: C:/Program Files (x86)/Activision/Star Trek Elite Force II Single Player Demo/base/
 
 
-library = files.game_library()
+library = libraries.GameLibrary.from_config()
 pk3s = {
     f"{section} | {game} | {short_path}": full_path
     for section, game, paths in library.scan(pk3_dirs, "*.pk3")
     for short_path, full_path in paths}
 
 
-@pytest.mark.parametrize("filename", pk3s.values(), ids=pk3s.keys())
-def test_from_file(filename: str):
-    pk3 = id_software.Pk3.from_file(filename)
+@pytest.mark.parametrize("filepath", pk3s.values(), ids=pk3s.keys())
+def test_from_file(filepath: str):
+    pk3 = id_software.Pk3.from_file(filepath)
     namelist = pk3.namelist()
     assert isinstance(namelist, list), ".namelist() failed"
     first_file = pk3.read(namelist[0])

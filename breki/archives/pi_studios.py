@@ -4,48 +4,54 @@ import io
 import struct
 from typing import List
 
+from .. import binary
 from .. import core
-from ..utils import binary
+from .. import files
+from ..files.parsed import parse_first
 from . import base
 
 
-class Bpk(base.Archive):
-    ext = "*.bpk"
+class Bpk(base.Archive, files.BinaryFile):
+    exts = ["*.bpk"]
     headers: List[CentralHeader]
     files: List[(LocalHeader, bytes)]
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.headers = list()
         self.files = list()
 
+    @parse_first
     def __repr__(self) -> str:
-        descriptor = f"{len(self.headers)} files"
+        descriptor = f'"{self.filename}" {len(self.headers)} files'
         return f"<{self.__class__.__name__} {descriptor} @ {id(self):016X}>"
 
+    @parse_first
     def namelist(self) -> List[str]:
         # TODO: get filenames somehow
         # -- reverse hashes in CentralHeader?
         raise NotImplementedError()
 
+    @parse_first
     def read(self, filename: str) -> bytes:
         raise NotImplementedError()
 
-    @classmethod
-    def from_stream(cls, stream: io.BytesIO) -> Bpk:
-        out = cls()
-        one, num_headers = binary.read_struct(stream, ">2I")
-        out.headers = [
-            CentralHeader.from_stream(stream)
+    def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
+        one, num_headers = binary.read_struct(self.stream, ">2I")
+        self.headers = [
+            CentralHeader.from_stream(self.stream)
             for i in range(num_headers)]
-        assert all(ch.one == 1 for ch in out.headers)
-        for header in out.headers:
+        assert all(header.one == 1 for header in self.headers)
+        for header in self.headers:
             assert header.size >= 0x48
-            stream.seek(header.offset)
-            local_header = LocalHeader.from_stream(stream)
-            data = stream.read(header.size - 0x48)[1:-5]
+            self.stream.seek(header.offset)
+            local_header = LocalHeader.from_stream(self.stream)
+            data = self.stream.read(header.size - 0x48)[1:-5]
             # NOTE: trimmed bytes are always 0
-            out.files.append((local_header, data))
-        return out
+            self.files.append((local_header, data))
 
 
 class CentralHeader(core.Struct):
