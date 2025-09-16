@@ -1,8 +1,6 @@
 # https://en.wikipedia.org/wiki/Alcohol_120%25
 # https://github.com/jkbenaim/mds2iso/blob/master/mds2iso.c
-from __future__ import annotations
 import enum
-import io
 from typing import List
 
 from .. import core
@@ -40,8 +38,8 @@ class MdsSessionHeader(core.Struct):
 
 
 class TrackMode(enum.Enum):
-    NONE = 0
-    DVD = 2
+    NONE = 0x00
+    DVD = 0x02
     AUDIO = 0xA9
     MODE1 = 0xAA
     MODE2 = 0xAB
@@ -73,11 +71,14 @@ class Mds(base.DiscImage, files.BinaryFile):
     tracks: List[MdsTrack]
     filenames: List[str]
 
-    def __init__(self):
+    def __init__(self, filepath: str, archive=None, code_page=None):
+        super().__init__(filepath, archive, code_page)
         self.tracks = list()
         self.filenames = list()
 
     def parse(self):
+        if self.is_parsed:
+            return
         self.is_parsed = True
         self.header = MdsHeader.from_stream(self.stream)
         assert self.header.magic == b"MEDIA DESCRIPTOR"
