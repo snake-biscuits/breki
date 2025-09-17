@@ -98,10 +98,12 @@ class FriendlyFile(ParsedFile):
         # NOTE: friends can be found in all sorts of places
         archive = self.archive if archive is None else archive
         if candidates is None:
-            if self.archive is None:
+            # NOTE: is self.archive is not None, candidates must be provided
+            # -- if you want to make friends in self.folder outside of archives
+            if archive is None:
                 neighbours = os.listdir(self.folder)
             else:
-                neighbours = self.archive.listdir(self.folder)
+                neighbours = archive.listdir(self.folder)
             candidates = {
                 filename: os.path.join(self.folder, filename)
                 for filename in neighbours}
