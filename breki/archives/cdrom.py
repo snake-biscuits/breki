@@ -29,11 +29,11 @@ strD = {
     *{chr(x) for x in range(ord("a"), ord("z") + 1)},
     *{chr(x) for x in range(ord("A"), ord("Z") + 1)},
     *{chr(x) for x in range(ord("0"), ord("9") + 1)},
-    *"._ []"}
+    *"._- []"}
 
 strA = {
     *strD,
-    *"!\"%&\'()*+,-./:;<=>?"}
+    *"!\"%&\'()*+,/:;<=>?"}
 
 
 def read_strA(stream: io.BytesIO, length: int) -> str:
@@ -184,7 +184,11 @@ class Directory:
             out.is_file = True
             out.name = filename.decode()[:-2]
             # verify name is valid strD ("." is also allowed)
-            assert len(set(out.name).difference(strD)) == 0, "invalid strD"
+            # assert len(set(out.name).difference(strD)) == 0, "invalid strD"
+            if len(set(out.name).difference(strD)) != 0:
+                print(f"{filename=}, {out.name=}")
+                print(f"{set(out.name).difference(strD)=}")
+                raise AssertionError("invalid strD")
         else:  # named directory
             # NOTE: haven't encountered any of these yet
             out.is_file = False  # directory
@@ -458,7 +462,8 @@ class Iso(base.Archive):
             assert terminator[1:] == b"CD001\x01", "Couldn't find next VolumeDescriptor"
             assert terminator[0] in (0x02, 0x03), f"0x{terminator[0]:02X} is not a valid VolumeDescriptor type"
             # NOTE: 0x02: Supplementary, 0x03: Partition, 0x04..0xFE: Reserved
-            self.log.append("skipping", {0x02: "Supplementary", 0x03: "Partition"}[terminator[0]], "Volume Descriptor")
+            type_ = {0x02: "Supplementary", 0x03: "Partition"}[terminator[0]]
+            self.log.append(f"skipping {type_} Volume Descriptor")
             terminator = self.disc.sector_read(1)[:7]
         # path table
         self.sector_seek(self.pvd.path_table_le_lba)
