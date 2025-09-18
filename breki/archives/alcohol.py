@@ -1,8 +1,10 @@
 # https://en.wikipedia.org/wiki/Alcohol_120%25
 # https://github.com/jkbenaim/mds2iso/blob/master/mds2iso.c
 import enum
+import os
 from typing import List
 
+from .. import binary
 from .. import core
 from .. import files
 from . import base
@@ -37,6 +39,7 @@ class MdsSessionHeader(core.Struct):
     _format = "2IH2B2H2I"
 
 
+# NOTE: currently unused
 class TrackMode(enum.Enum):
     NONE = 0x00
     DVD = 0x02
@@ -50,16 +53,17 @@ class TrackMode(enum.Enum):
 
 class MdsTrack(core.Struct):
     index: int  # track_number
+    first_sector: int
+    num_sectors: int
+    sector_size: int
+    unknown: List[int]  # 7x 0
+    num_filenames: int
+    filenames_offset: int  # absolute
     __slots__ = [
-        "mode", "num_subchannels", "adr", "index", "point_number",
-        "minutes", "seconds", "frames", "zero", "pmin", "psec", "pframe",
-        "index_block_offset", "sector_size", "unknown_1", "first_sector",
-        "sector_offset", "num_filenames", "filenames_offset", "unknown_2"]
-    _format = "12BI10HIQ2I6I"
-    _arrays = {"unknown_1": 9, "unknown_2": 6}
-    _classes = {"mode": TrackMode}
-
-    # TODO: load filenames w/ .from_stream
+        "index", "first_sector", "num_sectors", "sector_size",
+        "unknown", "num_filenames", "filenames_offset"]
+    _format = "13I"
+    _arrays = {"unknown": 7}
 
 
 class Mds(base.DiscImage, files.BinaryFile):
@@ -68,28 +72,58 @@ class Mds(base.DiscImage, files.BinaryFile):
     # NOTE: needs linked .mdf (Media Descriptor File) data files
     header: MdsHeader
     session_header: MdsSessionHeader  # 1x, not per-session?
-    tracks: List[MdsTrack]
-    filenames: List[str]
+    mds_tracks: {List[MdsTrack]: List[str]}
+    # ^ {MdsTrack: ["filename"]}
 
     def __init__(self, filepath: str, archive=None, code_page=None):
         super().__init__(filepath, archive, code_page)
-        self.tracks = list()
-        self.filenames = list()
+        self.mds_tracks = dict()
 
     def parse(self):
         if self.is_parsed:
             return
         self.is_parsed = True
+        # NOTE: only have 1 test file at present
         self.header = MdsHeader.from_stream(self.stream)
         assert self.header.magic == b"MEDIA DESCRIPTOR"
         assert self.header.version.major == 1
         assert self.header.version.minor == 3
         # sessions
+        assert self.header.sessions_offset == 0
         self.stream.seek(self.header.sessions_offset, 1)
         self.session_header = MdsSessionHeader.from_stream(self.stream)
-        self.stream.seek(self.session_header.tracks_offset, 1)
-        self.tracks = [
-            MdsTrack.from_stream(self.stream)
-            for i in range(self.session_header.num_tracks)]
-        # TODO: self.friends (Mdf?)
-        raise NotImplementedError()
+        # NOTE: track offset is a lie
+        assert self.session_header.tracks_offset > self.size
+        # self.stream.seek(self.session_header.tracks_offset, 1)
+        self.mds_tracks = {
+            MdsTrack.from_stream(self.stream): list()
+            for i in range(self.session_header.num_tracks)}
+        # NOTE: skipping a few thousand bytes of mystery data (mostly empty)
+        # get external track files
+        for track in self.mds_tracks:
+            first_sector = track.first_sector
+            assert track.num_filenames > 0, "track has no filenames"
+            for i in range(track.num_filenames):
+                self.stream.seek(track.filenames_offset + (16 * i))
+                # parse filename offset
+                offset, a, b, c = binary.read_struct(self.stream, "4I")
+                assert (a, b, c) == (0, 0, 0)
+                # get filename
+                self.stream.seek(offset)
+                filename = binary.read_str(self.stream, *self.code_page)
+                self.mds_tracks[track].append(filename)  # keep a note
+                # make a friend
+                filepath = os.path.join(self.folder, filename)
+                friend = files.File(filepath, self.archive)
+                friend.type = files.DataType.BINARY
+                self.friends[filename] = friend
+                # generate track from friend
+                assert track.sector_size == 2048, "track mode matters"
+                assert friend.size % track.sector_size == 0, "unexpected EOF"
+                num_sectors = friend.size // track.sector_size
+                # NOTE: guessing track mode, since sector_size is 2048
+                self.tracks.append(base.Track(
+                    base.TrackMode.BINARY_1, track.sector_size,
+                    first_sector, num_sectors, filename))
+                first_sector += num_sectors
+            assert first_sector - track.first_sector == track.num_sectors, "bad num_sectors"
