@@ -22,6 +22,9 @@ class Cue(base.DiscImage, files.FriendlyTextFile):
         # NOTE: we assume all metadata we need is declared before "TRACK"
         state = dict()
         keywords = ("FILE", "REM", "TRACK")
+        # NOTE: "INDEX 00 HH:MM:SS" indicates pregap start
+        # -- "INDEX 01 HH:MM:SS" indicates data start
+        # NOTE: 75 sectors per second
         lba = None
         for line in self.stream:
             keyword, space, context = line.strip().partition(" ")
