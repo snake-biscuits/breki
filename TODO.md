@@ -4,6 +4,7 @@
  * `ParsedFile`
    - `._repr(self, descriptor: str)`
      called w/ `super()` to reduce duplicate code
+   - `._default` valid "empty file" to build from
    - `._get_stream(self, type_)` overrides
      fall back to `_default` on `FileNotFound`
    - `.from_nested_archive(cls, filepath: str, archive_classes: dict)`
