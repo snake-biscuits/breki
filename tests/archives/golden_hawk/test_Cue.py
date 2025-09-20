@@ -59,5 +59,12 @@ def test_from_archive(zip_filepath: str, cue_filepath: str):
     # check tracks & track data
     assert len(cue.tracks) != 0
     assert len(cue.friends) == len(cue.tracks)
+    start_lbas = [track.start_lba for track in cue.tracks]
+    # NOTE: SINGLE DENSITY AREA is optional
+    assert start_lbas.count(45000) == 1, "no high density area"
+    prev_end = 0
     for track in cue.tracks:
         assert track.name in cue.friends
+        if track.start_lba != 45000:  # HIGH DENSITY AREA always starts @ 45000
+            assert track.start_lba == prev_end
+        prev_end = track.start_lba + track.length

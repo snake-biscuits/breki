@@ -47,9 +47,8 @@ class Cue(base.DiscImage, files.FriendlyTextFile):
         """run after getting sector sizes from external files"""
         prev_lba, prev_length = 0, 0
         for track_index, track in enumerate(self.tracks):
-            lba = track.start_lba
             # skip first "HIGH-DENSITY AREA" track
-            if not (track.start_lba == 45000 and prev_lba == 0):
-                track.start_lba += prev_length
+            if not (track.start_lba == 45000 and prev_lba < 45000):
+                track.start_lba = prev_lba + prev_length
             self.tracks[track_index] = track
-            prev_lba, prev_length = lba, track.length
+            prev_lba, prev_length = track.start_lba, track.length
