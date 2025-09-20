@@ -129,6 +129,7 @@ class Track:
     length: int  # in sectors, not bytes
     name: str  # can be a filename
     size: int = property(lambda s: s.length * s.sector_size)
+    duration: str  # HH:MM:SS.ms~ property
 
     def __init__(self, mode, sector_size, start_lba, length, name):
         self.mode = mode
@@ -156,6 +157,14 @@ class Track:
         elif self.mode == TrackMode.BINARY_2:
             header_size = {2336: 8, 2352: 24}[self.sector_size]
         return slice(header_size, 2048 + header_size)
+
+    @property
+    def duration(self) -> str:
+        milliseconds = f"{self.length / 75:.3f}"[-3:]
+        seconds = self.length // 75
+        minutes = (seconds // 60) % 60
+        hours = seconds // 60 ** 2
+        return f"{hours:02d}:{minutes:02d}:{seconds % 60:02d}.{milliseconds}"
 
 
 class DiscImage(files.FriendlyFile):
