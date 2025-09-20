@@ -72,3 +72,15 @@ For `.from_archive`: the archive is essential & it comes first in the path strin
 
 It's also worth noting that `__init__` args are a valid way to open a file.
 Since the data isn't read until `File.stream` is first cached.
+
+
+## Shoutouts
+### Tools
+ * [010 Editor](https://www.sweetscape.com/010editor/)
+ * [HxD](https://mh-nexus.de/en/hxd/)
+ * [IDA Pro](https://hex-rays.com/ida-pro)
+ * [IsoBuster](https://www.isobuster.com/)
+ * [Kaitai Struct](https://doc.kaitai.io/)
+ * [pakextract](https://github.com/yquake2/pakextract/)
+ * [radare2](https://github.com/radareorg/radare2)
+ * xxd (included with vim)
