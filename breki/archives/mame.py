@@ -120,7 +120,7 @@ class CompressedMapEntryv5:
 
 class Chd(base.DiscImage, files.BinaryFile):
     """Compressed Hunks of Data"""
-    ext = "*.chd"
+    exts = ["*.chd"]
     header: ChdHeaderv5
     metadata: List[Metadata]
 

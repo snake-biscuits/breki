@@ -17,7 +17,7 @@ from . import padus
 
 
 class Gdi(base.DiscImage, files.TextFile):
-    ext = "*.gdi"
+    exts = ["*.gdi"]
 
     def parse(self):
         if self.is_parsed:
