@@ -1,6 +1,7 @@
 import pytest
 
 from breki.archives.base import Archive
+from breki.files.parsed import BinaryFile, HybridFile, TextFile
 
 
 def all_subclasses_of(cls):
@@ -18,12 +19,17 @@ archive_classes = {
 @pytest.mark.parametrize("archive_class", archive_classes.values(), ids=archive_classes.keys())
 def test_in_spec(archive_class: object):
     assert issubclass(archive_class, Archive), "not a base.Archive subclass"
-    assert hasattr(archive_class, "exts"), "exts not specified"
-    assert isinstance(archive_class.exts, (list, dict)), "exts must be of type list"
+    assert hasattr(archive_class, "exts"), "no exts attr"
+    if not issubclass(archive_class, HybridFile):
+        assert issubclass(archive_class, (BinaryFile, TextFile))
+        assert isinstance(archive_class.exts, list), "non-list exts"
+    else:
+        assert isinstance(archive_class.exts, dict), "non-dict exts"
     # NOTE: sega.GDRom is a FriendlyHybridFile, since it wraps multiple DiscImage formats
+    assert len(archive_class.exts) > 0, "no exts"
     for ext in archive_class.exts:
-        assert isinstance(ext, str), "ext must be of type str"
-        assert "*" in ext, "ext must contain a wildcard"
+        assert isinstance(ext, str), "non-str ext"
+        assert "*" in ext, "ext does not contain wildcard"
         # NOTE: mostly "*.ext", but "*_dir.vpk" breaks that pattern
         # -- "pack*.vpk" for troika.Vpk breaks the pattern even more
     # NOTE: base.Archive provides defaults for all essential methods

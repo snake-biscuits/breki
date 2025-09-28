@@ -1,9 +1,10 @@
+from .. import files
 from . import base
 
 
-class Bpk(base.Archive):
+class Bpk(base.Archive, files.BinaryFile):
     """Titanfall (Xbox360) asset archive format"""
-    ext = "*.bpk"
+    exts = ["*.bpk"]
 
     def __init__(self, filename: str):
         raise NotImplementedError()

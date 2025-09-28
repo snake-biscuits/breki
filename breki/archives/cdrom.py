@@ -9,6 +9,7 @@ import os
 from typing import List
 
 from .. import binary
+from .. import files
 from ..files.parsed import parse_first
 from . import base
 
@@ -334,7 +335,7 @@ class PrimaryVolumeDescriptor:
         return out
 
 
-class Iso(base.Archive):
+class Iso(base.Archive, files.BinaryFile):
     exts = ["*.iso", "*.bin"]
     pvd_sector: int
     lba_offset: int  # added to LBA when seeking disc

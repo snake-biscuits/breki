@@ -24,7 +24,7 @@ def decompress(data: bytes) -> bytes:
     return decompressed_data[:true_size]  # trim any excess bytes
 
 
-class Hfs(base.Archive):
+class Hfs(base.Archive, files.BinaryFile):
     exts = ["*.hfs"]
 
     def __init__(self, filename: str):
@@ -220,7 +220,7 @@ class PakFile(base.Archive, files.BinaryFile):
         return b"".join(out)
 
 
-class Pkg(base.Archive):
+class Pkg(base.Archive, files.BinaryFile):
     exts = ["*.pkg"]
 
     def __init__(self, filename: str):
