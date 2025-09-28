@@ -39,7 +39,7 @@ class Gdi(base.DiscImage, files.TextFile):
             # NOTE: length of -1 means we get it from filesize
             self.tracks.append(base.Track(mode, sector_size, start_lba, -1, name))
         assert len(self.tracks) == num_tracks
-        self.make_friends()
+        self.recalc_track_lengths()
 
 
 # Boot Header
