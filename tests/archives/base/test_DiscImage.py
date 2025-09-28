@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from breki.archives.base import DiscImage, Track, TrackMode
 from breki.files import File
+from breki.files.parsed import BinaryFile
 
 
-class RawDiscImage(DiscImage):
+class RawDiscImage(DiscImage, BinaryFile):
+    exts = ["*.test"]
+
     @classmethod
     def from_bytes(cls, filepath: str, raw_bytes: bytes) -> RawDiscImage:
         """for tests & .iso"""
