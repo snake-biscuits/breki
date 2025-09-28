@@ -96,6 +96,10 @@ class Archive(files.ParsedFile):
         raise NotImplementedError("ArchiveClass has not defined .read()")
 
     def search(self, pattern: str, case_sensitive: bool = False) -> List[str]:
+        # NOTE: fnmatch.fnmatch uses os.path.normcase
+        # -- this means globs use the same case-sensitive rules as the OS
+        # TODO: match_case: bool = False
+        # -- default to case insensitive matches
         if case_sensitive:
             return [
                 filepath
