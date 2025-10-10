@@ -1,5 +1,5 @@
 __all__ = [
-    "archives", "binary", "core", "files", "libraries",
+    "archives", "binary", "core", "files", "libraries", "parse",
     "find_all", "read_str", "read_struct", "write_struct", "xxd",
     "BitField", "Struct", "MappedArray",
     "CodePage", "DataType", "File", "FriendlyFile",
@@ -7,7 +7,8 @@ __all__ = [
     "ParsedFile",
     "BinaryFile", "FriendlyBinaryFile",
     "HybridFile", "FriendlyHybridFile",
-    "TextFile", "FriendlyTextFile"]
+    "TextFile", "FriendlyTextFile",
+    "TokenClass"]
 
 # modules
 from . import archives
@@ -15,6 +16,7 @@ from . import binary
 from . import core
 from . import files
 from . import libraries
+from . import parse
 
 # classes
 from .binary import (
@@ -30,3 +32,5 @@ from .files import (
     TextFile, FriendlyTextFile)
 # from .libraries import (
 #     ...)
+from .parse import (
+    TokenClass)
