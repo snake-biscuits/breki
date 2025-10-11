@@ -8,6 +8,7 @@ __all__ = [
     "BinaryFile", "FriendlyBinaryFile",
     "HybridFile", "FriendlyHybridFile",
     "TextFile", "FriendlyTextFile",
+    "GameLibrary",
     "TokenClass"]
 
 # modules
@@ -30,7 +31,8 @@ from .files import (
     BinaryFile, FriendlyBinaryFile,
     HybridFile, FriendlyHybridFile,
     TextFile, FriendlyTextFile)
-# from .libraries import (
-#     ...)
+from .libraries import (
+    GameLibrary)
+# NOTE: skipping type hints for now, they need rethinking
 from .parse import (
     TokenClass)
