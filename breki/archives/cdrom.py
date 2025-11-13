@@ -18,11 +18,12 @@ from . import base
 # -- LBA * LB_size = BA
 
 
-def read_both_endian(stream: io.BytesIO, format_: str) -> int:
+def read_both_endian(stream: io.BytesIO, format_: str, must_match=True) -> int:
     """process one field at a time, don't try for multiple!"""
     little_endian = binary.read_struct(stream, f"<{format_}")
     big_endian = binary.read_struct(stream, f">{format_}")
-    assert little_endian == big_endian
+    if must_match:
+        assert little_endian == big_endian, f"{little_endian} != {big_endian}"
     return little_endian
 
 
@@ -160,11 +161,16 @@ class Directory:
     def from_stream(cls, stream: io.BytesIO) -> Directory:
         out = cls()
         out.length, out.ear_length = binary.read_struct(stream, "2B")
+        # NOTE: ear is short for "Extended Attribute Record"
         if out.length == 0:
             return None  # for if we're at the end of a directory list
-        # NOTE: ear is short for "Extended Attribute Record"
-        out.data_lba = read_both_endian(stream, "I")
-        out.data_size = read_both_endian(stream, "I")
+        # NOTE: lba & size don't have to match between little & big endian
+        # -- doesn't mean we'll find the data we want though
+        # TODO: Dream Explorer .cdi files are garbage data, wrong lba?
+        # -- data_size is 8000, `_DREAMEXP.DIR` has valid data @ LE address
+        # TODO: report LBA + byte offset for debugging
+        out.data_lba = read_both_endian(stream, "I", False)
+        out.data_size = read_both_endian(stream, "I", False)
         out.timestamp = TimeStamp.from_stream_bytes(stream)
         out.flags = FileFlag(binary.read_struct(stream, "B"))
         out.interleaved_unit_size = binary.read_struct(stream, "B")
@@ -179,6 +185,9 @@ class Directory:
                 out.name = "."  # local root
             elif filename == b"\x01":  # 2nd in sequence
                 out.name = ".."  # parent
+            elif filename.isascii():  # 1 char named directory
+                out.is_file = False
+                out.name = filename.decode()
             else:
                 raise RuntimeError(f"Unexpected File ID: {filename!r}")
         elif filename.endswith(b";1"):  # named file
@@ -197,7 +206,7 @@ class Directory:
         # optional 1 byte pad (next Directory will start on an even address)
         if filename_length % 2 == 0:
             assert stream.read(1) == b"\x00"
-        expected_length = 33 + filename_length + (filename_length + 1) % 2
+        expected_length = 33 + filename_length + ((filename_length + 1) % 2)
         # TODO: got some ISO extensions, not interested in supporting those rn
         if out.length != expected_length:
             out.extras = stream.read(out.length - expected_length)
@@ -312,7 +321,8 @@ class PrimaryVolumeDescriptor:
         out.path_table_be_lba = binary.read_struct(stream, ">I")
         out.opt_path_table_be_lba = binary.read_struct(stream, ">I")
         out.root_dir = Directory.from_stream(stream)
-        # TODO: assert root_dir was 34 bytes long
+        assert out.root_dir.length == 34
+        assert out.root_dir.name == "."
         out.set_name = read_strD(stream, 128)
         out.publisher = read_strA(stream, 128)
         out.data_preparer = read_strA(stream, 128)
@@ -410,16 +420,19 @@ class Iso(base.Archive, files.BinaryFile):
     def path_records(self, path_index: int) -> List[Directory]:
         path = self.path_table[path_index]
         self.sector_seek(path.extent_lba)
-        # TODO: confirm path records are limited to a single block
-        block = self.disc.sector_read(1)
-        stream = io.BytesIO(block)
+        raw = self.disc.sector_read(1)
+        stream = io.BytesIO(raw)
         directory = Directory.from_stream(stream)
         records = list()
         while directory is not None:
             records.append(directory)
+            if stream.tell() % 2048 > 2048 - 64:  # next Directory might overflow
+                cursor = stream.tell()
+                next_raw = self.disc.sector_read(1)
+                raw = b"".join([raw, next_raw])
+                stream = io.BytesIO(raw)
+                stream.seek(cursor)
             directory = Directory.from_stream(stream)
-        # TODO: how does Directory.from_stream handle EOF?
-        assert stream.tell() != 2048
         return records
 
     @parse_first
