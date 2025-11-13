@@ -163,14 +163,17 @@ class Directory:
         out.length, out.ear_length = binary.read_struct(stream, "2B")
         # NOTE: ear is short for "Extended Attribute Record"
         if out.length == 0:
-            return None  # for if we're at the end of a directory list
-        # NOTE: lba & size don't have to match between little & big endian
-        # -- doesn't mean we'll find the data we want though
-        # TODO: Dream Explorer .cdi files are garbage data, wrong lba?
-        # -- data_size is 8000, `_DREAMEXP.DIR` has valid data @ LE address
-        # TODO: report LBA + byte offset for debugging
-        out.data_lba = read_both_endian(stream, "I", False)
-        out.data_size = read_both_endian(stream, "I", False)
+            return None  # end of directories for this sector
+        out.le_data_lba = binary.read_struct(stream, "<I")
+        out.be_data_lba = binary.read_struct(stream, ">I")
+        out.le_data_size = binary.read_struct(stream, "<I")
+        out.be_data_size = binary.read_struct(stream, ">I")
+        if out.le_data_lba == out.be_data_lba:
+            out.data_lba = out.le_data_lba
+            out.data_size = out.le_data_size
+        else:
+            out.data_lba = out.be_data_lba
+            out.data_size = out.be_data_size
         out.timestamp = TimeStamp.from_stream_bytes(stream)
         out.flags = FileFlag(binary.read_struct(stream, "B"))
         out.interleaved_unit_size = binary.read_struct(stream, "B")
@@ -426,13 +429,8 @@ class Iso(base.Archive, files.BinaryFile):
         records = list()
         while directory is not None:
             records.append(directory)
-            if stream.tell() % 2048 > 2048 - 64:  # next Directory might overflow
-                cursor = stream.tell()
-                next_raw = self.disc.sector_read(1)
-                raw = b"".join([raw, next_raw])
-                stream = io.BytesIO(raw)
-                stream.seek(cursor)
             directory = Directory.from_stream(stream)
+        assert stream.tell != 2048, "directories fill block"
         return records
 
     @parse_first
