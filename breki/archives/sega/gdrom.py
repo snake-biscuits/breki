@@ -1,45 +1,19 @@
 """Dreamcast 'Giga-Disc' Handler"""
 # https://multimedia.cx/eggs/understanding-the-dreamcast-gd-rom-layout/
-
 from __future__ import annotations
 import fnmatch
 import io
 from typing import List
 
-from .. import files
-from ..files.parsed import parse_first
-from . import alcohol
-from . import base
-from . import cdrom
-from . import golden_hawk
-from . import mame
-from . import padus
-
-
-class Gdi(base.DiscImage, files.TextFile):
-    exts = ["*.gdi"]
-
-    def parse(self):
-        if self.is_parsed:
-            return
-        self.is_parsed = True
-        num_tracks = int(self.stream.readline())
-        modes = {
-            "0": base.TrackMode.AUDIO,
-            "4": base.TrackMode.BINARY_1}
-        for i, line in enumerate(self.stream):
-            line = line.rstrip()
-            assert line.count(" ") == 5
-            track_number, start_lba, mode, sector_size, name, zero = line.split(" ")
-            assert int(track_number) == i + 1
-            assert zero == "0"
-            mode = modes[mode]
-            sector_size = int(sector_size)
-            start_lba = int(start_lba)
-            # NOTE: length of -1 means we get it from filesize
-            self.tracks.append(base.Track(mode, sector_size, start_lba, -1, name))
-        assert len(self.tracks) == num_tracks
-        self.recalc_track_lengths()
+from ... import files
+from ...files.parsed import parse_first
+from .. import alcohol
+from .. import base
+from .. import cdrom
+from .. import golden_hawk
+from .. import mame
+from .. import padus
+from .gdi import Gdi
 
 
 # Boot Header
@@ -156,6 +130,7 @@ class GDRom(base.Archive, files.HybridFile):
         return self.gd_rom.read(filename)
 
     def parse(self):
+        self.is_parsed = True
         if self.disc is None:
             for pattern, disc_class in self.disc_classes.items():
                 if fnmatch.fnmatch(self.filename, pattern):

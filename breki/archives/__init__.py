@@ -28,7 +28,7 @@ from . import pkware  # Zip
 from . import respawn  # RPak & Vpk
 from . import ritual  # Sin
 from . import runecraft  # Pak
-from . import sega  # Gdi & GDRom
+from . import sega  # Gdi, GDRom & VMU
 from . import troika  # Vpk
 from . import utoplanet  # Apk
 from . import valve  # Vpk
@@ -37,6 +37,7 @@ from . import valve  # Vpk
 with_extension = {
     "*.007": gearbox.Nightfire007,
     "*.apk": utoplanet.Apk,
+    "*.bin": sega.VMU,
     "*.bpk": bluepoint.Bpk,  # OR pi_studios.Bpk
     "*.cdi": sega.GDRom,  # OR padus.Cdi
     "*.chd": sega.GDRom,  # OR mame.Chd
