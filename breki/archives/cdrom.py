@@ -430,7 +430,11 @@ class Iso(base.Archive, files.BinaryFile):
         while directory is not None:
             records.append(directory)
             directory = Directory.from_stream(stream)
-        assert stream.tell != 2048, "directories fill block"
+            if directory is None and stream.tell() > 2048 - 64:
+                # roll over into next sector
+                raw = self.disc.sector_read(1)
+                stream = io.BytesIO(raw)
+                directory = Directory.from_stream(stream)
         return records
 
     @parse_first
