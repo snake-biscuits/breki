@@ -5,6 +5,7 @@ import io
 from typing import Dict, List
 
 from ... import binary
+from ... import core
 from ... import files
 from ...files.parsed import parse_first
 from .. import base
@@ -134,6 +135,57 @@ class Root:
         assert out.num_user_blocks == 200
         out.unknown_2 = stream.read(430)
         return out
+
+
+class VMI(core.Struct):
+    checksum: bytes  # resource_name[:4] & b"SEGA"
+    description: bytes  # padded w/ spaces
+    copyright: bytes
+    created: List[int]
+    # NOTE: created.weekday 0-6, sun-sat
+    version: int  # always 0
+    file_number: int  # always 1
+    resource_name: bytes  # .VMS filename w/o extension
+    filename: bytes
+    mode: int
+    # bit 0: 0=CopyOk, 1=CopyProtect
+    # bit 1: 0=Data, 1=Game
+    padding: int  # always 0
+    filesize: int
+    __slots__ = [
+        "checksum", "description", "copyright",
+        "created", "version", "file_number",
+        "resource_name", "filename", "mode",
+        "padding", "filesize"]
+    _format = "4s32s32sH6B2H8s12s2HI"
+    _arrays = {
+        "created": [
+            "year", "month", "day",
+            "hour", "minute", "second",
+            "weekday"]}
+
+    @property
+    def created_str(self) -> str:
+        year = self.created.year
+        month = self.created.month
+        day = self.created.day
+        date = f"{year:04d}-{month:02d}-{day:02d}"
+        hour = self.created.hour
+        minute = self.created.minute
+        second = self.created.second
+        time = f"{hour:02d}:{minute:02d}:{second:02d}"
+        weekdays = [
+            "Sunday", "Monday", "Tuesday",
+            "Wednesday", "Thursday", "Friday",
+            "Saturday"]
+        return f"{date} {time} ({weekdays[self.created.weekday]})"
+
+    def __repr__(self) -> str:
+        # NOTE: encoding could be Shift-JIS
+        filename = self.filename.decode("latin_1").strip()
+        description = self.description.decode("latin_1").strip()
+        descriptor = f'{filename} {description} {self.filesize} bytes'
+        return f"<{self.__class__.__name__} {descriptor}>"
 
 
 class VMU(base.Archive, files.BinaryFile):
