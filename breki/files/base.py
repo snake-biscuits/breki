@@ -140,7 +140,7 @@ class File:
         else:  # default to BINARY
             stream = io.BytesIO(raw_bytes)
             type_ = DataType.BINARY
-        out = cls.from_stream(filepath, stream, code_page)
+        out = cls.from_stream(filepath, stream, type_, code_page)
         out.size = len(raw_bytes)
         out.type = type_
         return out
