@@ -1,5 +1,6 @@
 __all__ = [
     "archives", "binary", "core", "files", "libraries", "parse",
+    "Archive", "DiscImage", "Track", "TrackMode",
     "find_all", "read_str", "read_struct", "write_struct", "xxd",
     "BitField", "Struct", "MappedArray",
     "CodePage", "DataType", "File", "FriendlyFile",
@@ -20,6 +21,8 @@ from . import libraries
 from . import parse
 
 # classes
+from .archives import (
+    Archive, DiscImage, Track, TrackMode)
 from .binary import (
     find_all, read_str, read_struct, write_struct, xxd)
 from .core import (

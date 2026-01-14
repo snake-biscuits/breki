@@ -4,7 +4,8 @@ __all__ = [
     "id_software", "infinity_ward", "ion_storm", "mame", "nexon", "padus",
     "pi_studios", "pkware", "respawn", "ritual", "runecraft", "sega",
     "troika", "utoplanet", "valve",
-    "search_folder", "extract_folder"]
+    "search_folder", "extract_folder",
+    "Archive", "DiscImage", "Track", "TrackMode"]
 
 import fnmatch
 import os
@@ -32,6 +33,9 @@ from . import sega  # Gdi, GDRom & VMU
 from . import troika  # Vpk
 from . import utoplanet  # Apk
 from . import valve  # Vpk
+
+from .base import (
+    Archive, DiscImage, Track, TrackMode)
 
 
 with_extension = {
