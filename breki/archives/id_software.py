@@ -40,6 +40,10 @@ class Pak(base.Archive, files.BinaryFile):
         return self.stream.read(entry.length)
 
     @parse_first
+    def sizeof(self, filepath: str) -> int:
+        return self.entries[filepath].length
+
+    @parse_first
     def namelist(self) -> List[str]:
         return sorted(self.entries.keys())
 
