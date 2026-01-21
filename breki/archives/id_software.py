@@ -48,6 +48,9 @@ class Pak(base.Archive, files.BinaryFile):
         return sorted(self.entries.keys())
 
     def parse(self):
+        if self.is_parsed:
+            return
+        self.is_parsed = True
         assert self.stream.read(4) == b"PACK", "not a .pak file"
         # file table
         offset, length = binary.read_struct(self.stream, "2I")
