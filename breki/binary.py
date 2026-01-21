@@ -4,7 +4,7 @@ import struct
 from typing import Any, Generator, List, Union
 
 
-def find_all(data: bytes, substring: bytes):
+def find_all(data: bytes, substring: bytes) -> List[int]:
     """extending bytes.find to be useful"""
     out = list()
     start = 0
