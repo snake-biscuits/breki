@@ -137,6 +137,8 @@ class Nds(base.Archive, files.BinaryFile):
 
     @parse_first
     def read(self, filepath: str) -> bytes:
+        if filepath.startswith("./"):
+            filepath = filepath[2:]
         index = self.namelist().index(filepath)
         start, end = self.fat[index]
         self.stream.seek(start)
@@ -146,6 +148,8 @@ class Nds(base.Archive, files.BinaryFile):
 
     @parse_first
     def sizeof(self, filepath: str) -> int:
+        if filepath.startswith("./"):
+            filepath = filepath[2:]
         index = self.namelist().index(filepath)
         start, end = self.fat[index]
         return end - start
