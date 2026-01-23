@@ -64,7 +64,8 @@ class FileNameTable:
             elif str_length == 0:  # end of folder
                 parent += 1
             else:  # regular filename
-                filename = code_page.decode(stream.read(str_length))
+                raw_filename = stream.read(str_length)
+                filename = code_page.decode(raw_filename)
                 out.filenames.append((parent, filename))
         # collected files for all folders
         assert str_length == 0
@@ -80,7 +81,7 @@ class FileNameTable:
 class Nds(base.Archive, files.BinaryFile):
     """Nintendo DS Cartdridge Image"""
     exts = ["*.nds"]
-    code_page = files.CodePage("ascii", "strict")
+    code_page = files.CodePage("shift_jis", "strict")
     # header
     arm_9: BootVector
     arm_7: BootVector
@@ -131,9 +132,15 @@ class Nds(base.Archive, files.BinaryFile):
             for i in range(fat_length // 8)]
         assert self.stream.tell() == fat_offset + fat_length
 
+        # trim FAT if larger than FNT namelist
         if len(self.fat) > len(self.fnt.filenames):
-            self.full_fat = self.fat
+            self.full_fat = self.fat  # backup
             self.fat = self.fat[-(len(self.fnt.filenames)):]
+
+        # TODO: assert all FAT offsets are in bounds
+        # -- not overlapping boot roms, fnt or fat
+        # -- not going past end of cartridge
+        # -- full_fat can go out of bounds
 
     @parse_first
     def read(self, filepath: str) -> bytes:
