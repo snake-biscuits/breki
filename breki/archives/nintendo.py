@@ -2,7 +2,7 @@
 # https://chibiakumas.com/arm/nds.php
 from __future__ import annotations
 import os
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 from .. import binary
 from .. import core
@@ -31,8 +31,8 @@ class FileNameTable:
     # ^ [(folder index, "filename")]
     folders: List[Tuple[int, str, int]]
     # ^ [(parent index, "FOLDER", block_id)]
-    # NOTE: block_id increments by 1 per folder
-    # -- in tree order, nested folders appear later
+    # NOTE: block_id increments by 1 per folder (tree order)
+    # -- order is a side effect of how the FNT groups folders
 
     def __init__(self):
         self.unknown = 0
@@ -96,6 +96,23 @@ class Nds(base.Archive, files.BinaryFile):
         super().__init__(filepath, archive, code_page)
         self.full_fat = None
 
+    @property
+    @parse_first
+    def memory_map(self) -> Dict[str, Tuple[int, int]]:
+        file_data_start = min(start for start, end in self.fat)
+        file_data_end = max(end for start, end in self.fat)
+        file_data_length = file_data_end - file_data_start
+        # TODO: check for large gaps in file data
+        # -- sorting the FAT would be good for this
+        return {
+            "cartridge": (0, self.size),
+            "header": (0, 0x4000),
+            "arm9 boot rom": (self.arm_9.offset, self.arm_9.length),
+            "arm7 boot rom": (self.arm_7.offset, self.arm_7.length),
+            "file name table": self.fnt_header,
+            "file allocation table": self.fat_header,
+            "file data": (file_data_start, file_data_length)}
+
     @parse_first
     def namelist(self) -> List[str]:
         out = list()
@@ -119,6 +136,9 @@ class Nds(base.Archive, files.BinaryFile):
         self.fnt_header = binary.read_struct(self.stream, "2I")
         self.fat_header = binary.read_struct(self.stream, "2I")
         # TODO: header
+        # -- 0x0000 -> 0x0180 NDS
+        # -- 0x0180 -> 0x1000 DSi
+        # -- 0x1000 -> 0x4000 secure area?
 
         # File Name Table
         self.fnt = FileNameTable.from_stream(
