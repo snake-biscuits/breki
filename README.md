@@ -24,6 +24,10 @@
    - `ParsedFile`: base class for objects representing file data
    - `BinaryFile` & `TextFile`: `ParsedFile` subclasses for their matching `DataType`s
    - `HybridFile`: `ParsedFile` subclass for files with both binary & text representations
+ * `libraries`
+   - `GameLibrary`: scans game folders for files we can parse
+ * `parse`
+   - `TokenClass`: two-way string to python object conversion
 
 
 ## Migration from `bsp_tool`
