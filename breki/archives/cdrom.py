@@ -459,7 +459,7 @@ class Iso(base.Archive, files.BinaryFile):
     def parse(self):
         self.is_parsed = True
         if self.disc is None:  # self.stream -> 1 track DiscImage
-            self.disc = base.DiscImage()
+            self.disc = base.DiscImage(os.path.join(self.folder, self.filename))
             assert self.size % 2048 == 0, "unexpected EOF"
             length = self.size // 2048
             self.disc.tracks = [
