@@ -53,13 +53,28 @@
 
 
 ## Installation
+To use the latest **unstable** version, clone with `git`:
+```
+$ git clone git@github.com:snake-biscuits/breki.git
+$ cd breki
+$ pip install -e .
+```
 
-> TODO
+You can also clone with `pip`:
+
+```
+$ pip install git+https://github.com/snake-biscuits/breki.git
+```
+
+Or, use the latest stable release (February 2026 | 0.1.0 | Python 3.8-14):
+```
+$ pip install breki
+```
 
 
 ## Usage
 
-> TODO
+> TODO: usage guide / general docs
 
 
 ## Common Mistakes
@@ -67,14 +82,20 @@
 ### Archive / Filepath order
 
 `File.__init__` argument order is `filepath`, `archive`.
+
 `File.from_archive` argument order is `archive, filepath`.
 
+
 For `.__init__`: the archive is optional, so it can't come before `filepath`.
+
 For `.from_archive`: the archive is essential & it comes first in the path string.
+
 
 > e.g. `folder/archive.zip/file.ext` -> `.from_archive(Zip("folder/archive.zip"), "file.ext")`
 
+
 It's also worth noting that `__init__` args are a valid way to open a file.
+
 Since the data isn't read until `File.stream` is first cached.
 
 
