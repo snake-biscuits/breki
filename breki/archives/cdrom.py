@@ -476,9 +476,9 @@ class Iso(base.Archive, files.BinaryFile):
         terminator = self.disc.sector_read(1)[:7]
         while terminator != b"\xFFCD001\x01":
             assert terminator[1:] == b"CD001\x01", "Couldn't find next VolumeDescriptor"
-            assert terminator[0] in (0x02, 0x03), f"0x{terminator[0]:02X} is not a valid VolumeDescriptor type"
-            # NOTE: 0x02: Supplementary, 0x03: Partition, 0x04..0xFE: Reserved
-            type_ = {0x02: "Supplementary", 0x03: "Partition"}[terminator[0]]
+            assert terminator[0] in (0x00, 0x02, 0x03), f"0x{terminator[0]:02X} is not a valid VolumeDescriptor type"
+            # NOTE: 0x04 through 0xFE (inclusive) are reserved
+            type_ = {0x00: "Boot", 0x02: "Supplementary", 0x03: "Partition"}[terminator[0]]
             self.log.append(f"skipping {type_} Volume Descriptor")
             terminator = self.disc.sector_read(1)[:7]
         # path table
