@@ -91,7 +91,9 @@ class Vpk(base.Archive, files.FriendlyBinaryFile):
 
     @parse_first
     def read(self, filename: str) -> bytes:
-        assert filename in self.namelist()
+        filename = filename.replace("\\", "/")
+        if filename not in self.namelist():
+            raise FileNotFoundError(f"couldn't find '{filename}' in {self.filename}")
         entry = self.entries[filename]
         if entry.archive_index != 0x7FFF:
             assert self.filename.endswith("_dir.vpk")
