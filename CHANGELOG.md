@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.0 (??? 2026)
+## v0.1.0 (8 August 2026)
 
 ### New
  * Migrated code from `bsp_tool`
