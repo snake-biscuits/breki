@@ -47,4 +47,4 @@ jobs:
 
     - name: Test with pytest
       run: |
-    pytest -vv --cov=breki --color=yes
+        pytest -vv --cov=breki --color=yes
