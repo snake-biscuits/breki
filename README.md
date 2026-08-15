@@ -66,7 +66,7 @@ You can also clone with `pip`:
 $ pip install git+https://github.com/snake-biscuits/breki.git
 ```
 
-Or, use the latest stable release (February 2026 | 0.1.0 | Python 3.8-14):
+Or, use the latest stable release (August 2026 | 0.1.0 | Python 3.8-14):
 ```
 $ pip install breki
 ```
